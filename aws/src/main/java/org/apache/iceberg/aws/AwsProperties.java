@@ -295,6 +295,14 @@ public class AwsProperties implements Serializable {
   public static final String HTTP_CLIENT_TYPE_DEFAULT = HTTP_CLIENT_TYPE_URLCONNECTION;
 
   /**
+   * If set {@code true}, requests to STS will prefetch the credentials asynchronously.
+   * <p>
+   * For more details, see https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/auth/credentials/HttpCredentialsProvider.Builder.html#asyncCredentialUpdateEnabled-java.lang.Boolean-
+   */
+  public static final String STS_ASYNC_CREDENTIAL_UPDATE_ENABLED = "sts.async-credential-update-enabled";
+  public static final boolean STS_ASYNC_CREDENTIAL_UPDATE_ENABLED_DEFAULT = false;
+
+  /**
    * Used by {@link S3FileIO} to tag objects when writing. To set, we can pass a catalog property.
    * <p>
    * For more details, see https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-tagging.html

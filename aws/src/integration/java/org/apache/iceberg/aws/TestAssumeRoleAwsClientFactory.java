@@ -79,6 +79,7 @@ public class TestAssumeRoleAwsClientFactory {
     assumeRoleProperties.put(AwsProperties.CLIENT_ASSUME_ROLE_ARN, response.role().arn());
     assumeRoleProperties.put(AwsProperties.CLIENT_ASSUME_ROLE_TAGS_PREFIX + "key1", "value1");
     assumeRoleProperties.put(AwsProperties.CLIENT_ASSUME_ROLE_TAGS_PREFIX + "key2", "value2");
+    assumeRoleProperties.put(AwsProperties.STS_ASYNC_CREDENTIAL_UPDATE_ENABLED, "true");
     policyName = UUID.randomUUID().toString();
   }
 

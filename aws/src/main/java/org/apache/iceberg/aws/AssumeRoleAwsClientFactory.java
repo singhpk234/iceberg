@@ -47,6 +47,7 @@ public class AssumeRoleAwsClientFactory implements AwsClientFactory {
   private String s3Endpoint;
   private boolean s3UseArnRegionEnabled;
   private String httpClientType;
+  private boolean stsAsyncCredentialUpdateEnabled;
 
   @Override
   public S3Client s3() {
@@ -90,6 +91,8 @@ public class AssumeRoleAwsClientFactory implements AwsClientFactory {
         AwsProperties.S3_USE_ARN_REGION_ENABLED_DEFAULT);
     this.httpClientType = PropertyUtil.propertyAsString(properties,
         AwsProperties.HTTP_CLIENT_TYPE, AwsProperties.HTTP_CLIENT_TYPE_DEFAULT);
+    this.stsAsyncCredentialUpdateEnabled = PropertyUtil.propertyAsBoolean(properties,
+        AwsProperties.STS_ASYNC_CREDENTIAL_UPDATE_ENABLED, AwsProperties.STS_ASYNC_CREDENTIAL_UPDATE_ENABLED_DEFAULT);
   }
 
   protected <T extends AwsClientBuilder & AwsSyncClientBuilder> T configure(T clientBuilder) {
@@ -104,6 +107,7 @@ public class AssumeRoleAwsClientFactory implements AwsClientFactory {
     clientBuilder.credentialsProvider(
         StsAssumeRoleCredentialsProvider.builder()
             .stsClient(sts())
+            .asyncCredentialUpdateEnabled(stsAsyncCredentialUpdateEnabled)
             .refreshRequest(request)
             .build());
 
