@@ -20,6 +20,7 @@
 package org.apache.iceberg.spark.actions;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -355,13 +356,37 @@ public class BaseRewriteManifestsSparkAction
         return Collections.emptyIterator();
       }
 
-      List<ManifestFile> manifests = Lists.newArrayList();
+      List<ManifestFile> manifests = Collections.synchronizedList(Lists.newArrayList());
       if (rowsAsList.size() <= maxNumManifestEntries) {
         manifests.add(writeManifest(rowsAsList, 0, rowsAsList.size(), io, location, format, spec, sparkType));
       } else {
-        int midIndex = rowsAsList.size() / 2;
-        manifests.add(writeManifest(rowsAsList, 0, midIndex, io, location, format, spec, sparkType));
-        manifests.add(writeManifest(rowsAsList,  midIndex, rowsAsList.size(), io, location, format, spec, sparkType));
+        int maxEntriesPerManifest = (int) maxNumManifestEntries;
+        int bins = (rowsAsList.size() - 1) / maxEntriesPerManifest;
+        try {
+          Tasks.range(bins + 1)
+              .stopOnFailure()
+              .throwFailureWhenFinished()
+              .executeWith(ThreadPools.getWorkerPool())
+              .run(id -> {
+                try {
+                  int st = (id * maxEntriesPerManifest);
+                  int en = (id + 1) * maxEntriesPerManifest;
+                  manifests.add(writeManifest(
+                      rowsAsList,
+                      st,
+                      Math.min(en, rowsAsList.size()),
+                      io,
+                      location,
+                      format,
+                      spec,
+                      sparkType));
+                } catch (IOException ioException) {
+                  throw new UncheckedIOException(ioException);
+                }
+              });
+        } catch (UncheckedIOException uncheckedIOException) {
+          throw uncheckedIOException.getCause();
+        }
       }
 
       return manifests.iterator();

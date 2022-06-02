@@ -381,7 +381,7 @@ public class TestRewriteManifestsAction extends SparkTestBase {
 
     // set the target manifest size to a small value to force splitting records into multiple files
     table.updateProperties()
-        .set(TableProperties.MANIFEST_TARGET_SIZE_BYTES, String.valueOf(manifests.get(0).length() / 2))
+        .set(TableProperties.MANIFEST_TARGET_SIZE_BYTES, String.valueOf(manifests.get(0).length() / 10))
         .commit();
 
     SparkActions actions = SparkActions.get();
@@ -392,12 +392,12 @@ public class TestRewriteManifestsAction extends SparkTestBase {
         .execute();
 
     Assert.assertEquals("Action should rewrite 1 manifest", 1, Iterables.size(result.rewrittenManifests()));
-    Assert.assertEquals("Action should add 2 manifests", 2, Iterables.size(result.addedManifests()));
+    Assert.assertEquals("Action should add 9 manifests", 9, Iterables.size(result.addedManifests()));
 
     table.refresh();
 
     List<ManifestFile> newManifests = table.currentSnapshot().allManifests(table.io());
-    Assert.assertEquals("Should have 2 manifests after rewrite", 2, newManifests.size());
+    Assert.assertEquals("Should have 9 manifests after rewrite", 9, newManifests.size());
 
     Dataset<Row> resultDF = spark.read().format("iceberg").load(tableLocation);
     List<ThreeColumnRecord> actualRecords = resultDF.sort("c1", "c2")
