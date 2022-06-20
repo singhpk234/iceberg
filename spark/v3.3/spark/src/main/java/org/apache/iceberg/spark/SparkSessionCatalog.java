@@ -28,8 +28,10 @@ import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.spark.source.HasIcebergCatalog;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
+import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
+import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.catalog.CatalogExtension;
 import org.apache.spark.sql.connector.catalog.CatalogPlugin;
@@ -41,6 +43,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCatalog;
 import org.apache.spark.sql.connector.catalog.TableChange;
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
@@ -94,7 +97,12 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public Map<String, String> loadNamespaceMetadata(String[] namespace) throws NoSuchNamespaceException {
-    return getSessionCatalog().loadNamespaceMetadata(namespace);
+    try {
+      return getSessionCatalog().loadNamespaceMetadata(namespace);
+    } catch (Exception e) {
+      // work around because it's now throwing NoSuchDbException
+      throw new NoSuchNamespaceException(namespace);
+    }
   }
 
   @Override
@@ -108,8 +116,9 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
-  public boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException {
-    return getSessionCatalog().dropNamespace(namespace);
+  public boolean dropNamespace(String[] namespace, boolean cascade)
+      throws NoSuchNamespaceException, NonEmptyNamespaceException {
+    return getSessionCatalog().dropNamespace(namespace, cascade);
   }
 
   @Override
@@ -137,7 +146,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
-                           Map<String, String> properties)
+      Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     String provider = properties.get("provider");
     if (useIceberg(provider)) {
@@ -150,7 +159,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public StagedTable stageCreate(Identifier ident, StructType schema, Transform[] partitions,
-                                 Map<String, String> properties)
+      Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     String provider = properties.get("provider");
     TableCatalog catalog;
@@ -170,7 +179,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public StagedTable stageReplace(Identifier ident, StructType schema, Transform[] partitions,
-                                  Map<String, String> properties)
+      Map<String, String> properties)
       throws NoSuchNamespaceException, NoSuchTableException {
     String provider = properties.get("provider");
     TableCatalog catalog;
@@ -201,7 +210,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public StagedTable stageCreateOrReplace(Identifier ident, StructType schema, Transform[] partitions,
-                                          Map<String, String> properties) throws NoSuchNamespaceException {
+      Map<String, String> properties) throws NoSuchNamespaceException {
     String provider = properties.get("provider");
     TableCatalog catalog;
     if (useIceberg(provider)) {
@@ -334,5 +343,15 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
     Preconditions.checkArgument(icebergCatalog instanceof HasIcebergCatalog,
         "Cannot return underlying Iceberg Catalog, wrapped catalog does not contain an Iceberg Catalog");
     return ((HasIcebergCatalog) icebergCatalog).icebergCatalog();
+  }
+
+  @Override
+  public Identifier[] listFunctions(String[] namespace) throws NoSuchNamespaceException {
+    throw new NoSuchNamespaceException(namespace);
+  }
+
+  @Override
+  public UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException {
+    throw new NoSuchFunctionException(ident);
   }
 }
