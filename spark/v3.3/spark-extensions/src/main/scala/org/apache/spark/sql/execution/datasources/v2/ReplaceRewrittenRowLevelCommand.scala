@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * Replaces operations such as DELETE and MERGE with the corresponding rewrite plans.
  */
 object ReplaceRewrittenRowLevelCommand extends Rule[LogicalPlan] {
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case c: RowLevelCommand if c.rewritePlan.isDefined =>
       c.rewritePlan.get
