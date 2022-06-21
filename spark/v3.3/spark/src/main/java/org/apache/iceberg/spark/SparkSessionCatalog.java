@@ -96,13 +96,13 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
+  public boolean namespaceExists(String[] namespace) {
+    return getSessionCatalog().namespaceExists(namespace);
+  }
+
+  @Override
   public Map<String, String> loadNamespaceMetadata(String[] namespace) throws NoSuchNamespaceException {
-    try {
-      return getSessionCatalog().loadNamespaceMetadata(namespace);
-    } catch (Exception e) {
-      // work around because it's now throwing NoSuchDbException
-      throw new NoSuchNamespaceException(namespace);
-    }
+    return getSessionCatalog().loadNamespaceMetadata(namespace);
   }
 
   @Override
