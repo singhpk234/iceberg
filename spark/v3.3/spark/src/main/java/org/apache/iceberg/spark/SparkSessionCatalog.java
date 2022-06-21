@@ -146,7 +146,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public Table createTable(Identifier ident, StructType schema, Transform[] partitions,
-      Map<String, String> properties)
+                           Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     String provider = properties.get("provider");
     if (useIceberg(provider)) {
@@ -159,7 +159,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public StagedTable stageCreate(Identifier ident, StructType schema, Transform[] partitions,
-      Map<String, String> properties)
+                                 Map<String, String> properties)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
     String provider = properties.get("provider");
     TableCatalog catalog;
@@ -179,7 +179,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public StagedTable stageReplace(Identifier ident, StructType schema, Transform[] partitions,
-      Map<String, String> properties)
+                                  Map<String, String> properties)
       throws NoSuchNamespaceException, NoSuchTableException {
     String provider = properties.get("provider");
     TableCatalog catalog;
@@ -210,7 +210,7 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
 
   @Override
   public StagedTable stageCreateOrReplace(Identifier ident, StructType schema, Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException {
+                                          Map<String, String> properties) throws NoSuchNamespaceException {
     String provider = properties.get("provider");
     TableCatalog catalog;
     if (useIceberg(provider)) {
@@ -346,8 +346,8 @@ public class SparkSessionCatalog<T extends TableCatalog & SupportsNamespaces>
   }
 
   @Override
-  public Identifier[] listFunctions(String[] namespace) throws NoSuchNamespaceException {
-    throw new NoSuchNamespaceException(namespace);
+  public Identifier[] listFunctions(String[] namespace) {
+    return new Identifier[0];
   }
 
   @Override

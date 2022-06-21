@@ -66,7 +66,7 @@ object ExtendedV2ExpressionUtils extends SQLConfHelper {
         SortOrder(catalystChild, toCatalyst(direction), toCatalyst(nullOrdering), Seq.empty)
       case IdentityTransform(ref) =>
         resolveRef[NamedExpression](ref, query)
-      case t :Transform if BucketTransform.unapply(t).isDefined =>
+      case t: Transform if BucketTransform.unapply(t).isDefined =>
         t match {
             // sort columns will be empty for bucket.
           case BucketTransform(numBuckets, cols, _) =>
