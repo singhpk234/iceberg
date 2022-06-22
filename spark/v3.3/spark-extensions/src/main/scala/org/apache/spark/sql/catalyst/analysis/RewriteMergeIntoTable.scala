@@ -70,7 +70,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * This rule assumes the commands have been fully resolved and all assignments have been aligned.
  * That's why it must be run after AlignRowLevelCommandAssignments.
  */
-object RewriteMergeIntoTable extends RewriteRowLevelDeltaCommand with RewriteRowLevelCommand {
+object RewriteMergeIntoTable extends RewriteRowLevelIcebergCommand {
 
   private final val ROW_FROM_SOURCE = "__row_from_source"
   private final val ROW_FROM_TARGET = "__row_from_target"

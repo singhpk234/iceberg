@@ -80,8 +80,7 @@ class SparkPositionDeltaOperation implements RowLevelOperation, SupportsDelta {
   @Override
   public DeltaWriteBuilder newWriteBuilder(LogicalWriteInfo info) {
     if (lazyWriteBuilder == null) {
-      Preconditions.checkArgument(info instanceof ExtendedLogicalWriteInfo,
-          "info should be an instance of ExtendedLogicalWriteInfo");
+      Preconditions.checkArgument(info instanceof ExtendedLogicalWriteInfo, "info must be ExtendedLogicalWriteInfo");
       // don't validate the scan is not null as if the condition evaluates to false,
       // the optimizer replaces the original scan relation with a local relation
       lazyWriteBuilder = new SparkPositionDeltaWriteBuilder(

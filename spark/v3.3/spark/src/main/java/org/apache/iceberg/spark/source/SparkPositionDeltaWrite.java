@@ -82,6 +82,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.iceberg.IsolationLevel.SERIALIZABLE;
+import static org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE;
+import static org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE;
+import static org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE;
 
 class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrdering {
 
@@ -191,7 +194,7 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
           rowDelta.validateFromSnapshot(scan.snapshotId());
         }
 
-        if (command == Command.UPDATE || command == Command.MERGE) {
+        if (command == UPDATE || command == MERGE) {
           rowDelta.validateDeletedFiles();
           rowDelta.validateNoConflictingDeleteFiles();
         }
@@ -330,7 +333,7 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
           .positionDeleteSparkType(context.deleteSparkType())
           .build();
 
-      if (command == Command.DELETE) {
+      if (command == DELETE) {
         return new DeleteOnlyDeltaWriter(table, writerFactory, deleteFileFactory, context);
 
       } else if (table.spec().isUnpartitioned()) {

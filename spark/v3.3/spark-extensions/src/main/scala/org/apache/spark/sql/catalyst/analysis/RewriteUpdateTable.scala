@@ -51,7 +51,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *
  * This rule also must be run in the same batch with DeduplicateRelations in Spark.
  */
-object RewriteUpdateTable extends RewriteRowLevelDeltaCommand with RewriteRowLevelCommand {
+object RewriteUpdateTable extends RewriteRowLevelIcebergCommand {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u @ UpdateIcebergTable(aliasedTable, assignments, cond, None) if u.resolved && u.aligned =>

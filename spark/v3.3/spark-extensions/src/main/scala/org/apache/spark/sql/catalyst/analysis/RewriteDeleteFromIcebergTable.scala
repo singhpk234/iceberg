@@ -47,7 +47,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * by simply passing delete filters to the connector. If yes, the optimizer will then discard
  * the rewrite plan.
  */
-object RewriteDeleteFromIcebergTable extends RewriteRowLevelDeltaCommand with RewriteRowLevelCommand {
+object RewriteDeleteFromIcebergTable extends RewriteRowLevelIcebergCommand {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case d @ DeleteFromIcebergTable(aliasedTable, Some(cond), None) if d.resolved =>
