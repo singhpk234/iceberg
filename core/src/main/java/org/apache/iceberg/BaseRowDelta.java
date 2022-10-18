@@ -116,4 +116,9 @@ class BaseRowDelta extends MergingSnapshotProducer<RowDelta> implements RowDelta
       }
     }
   }
+
+  @Override
+  protected Long startingSnapshotId() {
+    return startingSnapshotId;
+  }
 }

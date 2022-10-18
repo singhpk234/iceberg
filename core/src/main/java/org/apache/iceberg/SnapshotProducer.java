@@ -45,12 +45,14 @@ import org.apache.iceberg.events.Listeners;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.RuntimeIOException;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.util.Exceptions;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.Tasks;
 import org.apache.iceberg.util.ThreadPools;
 import org.slf4j.Logger;
@@ -178,6 +180,8 @@ abstract class SnapshotProducer<ThisT> implements SnapshotUpdate<ThisT> {
    */
   protected abstract List<ManifestFile> apply(TableMetadata metadataToUpdate, Snapshot snapshot);
 
+  protected abstract Long startingSnapshotId();
+
   @Override
   public Snapshot apply() {
     refresh();
@@ -194,7 +198,46 @@ abstract class SnapshotProducer<ThisT> implements SnapshotUpdate<ThisT> {
     long sequenceNumber = base.nextSequenceNumber();
     Long parentSnapshotId = parentSnapshot == null ? null : parentSnapshot.snapshotId();
 
-    validate(base, parentSnapshot);
+    try {
+      validate(base, parentSnapshot);
+    } catch (ValidationException ve) {
+      // conflict can occur here
+      if (PropertyUtil.propertyAsBoolean(
+          base.properties(),
+          TableProperties.ROLLBACK_COMPACTION_ON_CONFLICTS_ENABLED,
+          TableProperties.ROLLBACK_COMPACTION_ON_CONFLICTS_ENABLED_DEFAULT)) {
+        System.out.println("ABC");
+        boolean isCommitSuccessfullyApplied = false;
+        // when we get a validation exception, update parentSnapshot to it's grandParent
+        // provided parentSnapshot is of type replace and never rollback beyond startingSnapshotId
+        while (parentSnapshotId != null
+            && DataOperations.REPLACE.equals(base.snapshot(parentSnapshotId).operation())
+            && !parentSnapshotId.equals(startingSnapshotId())) {
+          // find it's parent
+          parentSnapshotId = base.snapshot(parentSnapshotId).parentId();
+          System.out.println("Trying with parent " + parentSnapshotId);
+          if (parentSnapshotId == null) {
+            // no parent to rollback to
+            throw ve;
+          }
+          parentSnapshot = base.snapshot(parentSnapshotId);
+          try {
+            validate(base, parentSnapshot);
+            isCommitSuccessfullyApplied = true;
+          } catch (ValidationException vx) {
+            // swallow the exception
+            System.out.println("issue with update + "  + parentSnapshotId);
+          }
+        }
+
+        if (!isCommitSuccessfullyApplied) {
+          throw ve;
+        }
+      } else {
+        throw ve;
+      }
+    }
+
     List<ManifestFile> manifests = apply(base, parentSnapshot);
 
     if (base.formatVersion() > 1

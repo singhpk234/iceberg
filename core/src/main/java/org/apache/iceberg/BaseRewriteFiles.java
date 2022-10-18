@@ -117,4 +117,9 @@ class BaseRewriteFiles extends MergingSnapshotProducer<RewriteFiles> implements 
       validateNoNewDeletesForDataFiles(base, startingSnapshotId, replacedDataFiles);
     }
   }
+
+  @Override
+  protected Long startingSnapshotId() {
+    return startingSnapshotId;
+  }
 }
