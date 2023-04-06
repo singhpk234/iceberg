@@ -703,6 +703,22 @@ acceptedBreaks:
       old: "method void org.apache.iceberg.rest.auth.OAuth2Util.AuthSession::<init>(java.util.Map<java.lang.String,\
         \ java.lang.String>, java.lang.String, java.lang.String)"
       justification: "Removing deprecations for 1.3.0"
+    org.apache.iceberg:iceberg-parquet:
+    - code: "java.method.numberOfParametersChanged"
+      old: "method void org.apache.iceberg.parquet.BasePageIterator::initFromPage(org.apache.parquet.column.page.DataPageV1)"
+      new: "method void org.apache.iceberg.parquet.BasePageIterator::initFromPage(org.apache.parquet.column.page.DataPageV1,\
+        \ org.apache.parquet.bytes.ByteBufferInputStream)"
+      justification: "support prefetch of data pages"
+    - code: "java.method.numberOfParametersChanged"
+      old: "method void org.apache.iceberg.parquet.BasePageIterator::initFromPage(org.apache.parquet.column.page.DataPageV2)"
+      new: "method void org.apache.iceberg.parquet.BasePageIterator::initFromPage(org.apache.parquet.column.page.DataPageV2,\
+        \ org.apache.parquet.bytes.ByteBufferInputStream)"
+      justification: "support prefetch of data pages"
+    - code: "java.method.numberOfParametersChanged"
+      old: "method void org.apache.iceberg.parquet.BasePageIterator::setPage(org.apache.parquet.column.page.DataPage)"
+      new: "method void org.apache.iceberg.parquet.BasePageIterator::setPage(org.apache.parquet.column.page.DataPage,\
+        \ org.apache.parquet.bytes.ByteBufferInputStream)"
+      justification: "support prefetch of data pages"
   apache-iceberg-0.14.0:
     org.apache.iceberg:iceberg-api:
     - code: "java.class.defaultSerializationChanged"

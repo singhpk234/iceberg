@@ -105,8 +105,8 @@ abstract class PageIterator<T> extends BasePageIterator implements TripleIterato
   }
 
   @Override
-  public void setPage(DataPage page) {
-    super.setPage(page);
+  public void setPage(DataPage page, ByteBufferInputStream inputStream) {
+    super.setPage(page, inputStream);
     advance();
   }
 
