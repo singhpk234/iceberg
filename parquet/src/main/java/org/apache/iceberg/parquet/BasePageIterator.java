@@ -90,7 +90,7 @@ public abstract class BasePageIterator {
   }
 
   public void setPage(DataPage dataPage, final ByteBufferInputStream inputStream) {
-    Preconditions.checkNotNull(page, "Cannot read from null page");
+    Preconditions.checkNotNull(dataPage, "Cannot read from null page");
     this.page = dataPage;
     this.page.accept(
         new DataPage.Visitor<ValuesReader>() {

@@ -69,6 +69,7 @@ public abstract class BaseColumnIterator {
     pageIterator.reset();
     dictionary = ParquetUtil.readDictionary(desc, pageSource);
     pageIterator.setDictionary(dictionary);
+    fetchNextPage();
     advance();
   }
 
