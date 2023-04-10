@@ -106,6 +106,10 @@ public abstract class BaseColumnIterator {
               DataPage page = null;
               while (pageValueCount <= 0) {
                 page = pageSource.readPage();
+                // if this is the last page then return
+                if (page == null) {
+                  return null;
+                }
                 pageValueCount = page.getValueCount();
               }
               if (page != null) {
