@@ -90,8 +90,22 @@ if [ ! -e $APP_HOME/gradle/wrapper/gradle-wrapper.jar ]; then
 fi
 
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m" "-XX:+IgnoreUnrecognizedVMOptions" "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED" "--add-opens=java.base/java.io=ALL-UNNAMED" "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED" "--add-opens=java.base/java.lang=ALL-UNNAMED" "--add-opens=java.base/java.math=ALL-UNNAMED" "--add-opens=java.base/java.net=ALL-UNNAMED" "--add-opens=java.base/java.nio=ALL-UNNAMED" "--add-opens=java.base/java.text=ALL-UNNAMED" "--add-opens=java.base/java.time=ALL-UNNAMED" "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED" "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED" "--add-opens=java.base/java.util.regex=ALL-UNNAMED" "--add-opens=java.base/java.util=ALL-UNNAMED" "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED" "--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED" "--add-opens=java.sql/java.sql=ALL-UNNAMED"'
 
+JAVA_OPTS="-XX:+IgnoreUnrecognizedVMOptions
+           --add-opens=java.base/java.lang=ALL-UNNAMED
+           --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+           --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+           --add-opens=java.base/java.io=ALL-UNNAMED
+           --add-opens=java.base/java.net=ALL-UNNAMED
+           --add-opens=java.base/java.nio=ALL-UNNAMED
+           --add-opens=java.base/java.util=ALL-UNNAMED
+           --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+           --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+           --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+           --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+           --add-opens=java.base/sun.security.action=ALL-UNNAMED
+           --add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
 # Use the maximum available, or set MAX_FD != -1 to use that value.
 MAX_FD=maximum
 
