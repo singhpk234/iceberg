@@ -403,8 +403,6 @@ public class TestExpressionUtil {
             .toLocalDateTime()
             .toString();
 
-    System.out.println("To String value in ci " + lastWeekLocal);
-
     assertEquals(
         Expressions.equal("test", "(timestamp-7-days-ago)"),
         ExpressionUtil.sanitize(Expressions.equal("test", lastWeekLocal)));
@@ -453,7 +451,7 @@ public class TestExpressionUtil {
   @Test
   public void testSanitizeTimestamptzAboutNow() {
     // this string is the current time with the local zone offset
-    String nowUtc = OffsetDateTime.now().atZoneSameInstant(ZoneOffset.UTC).toString();
+    String nowUtc = OffsetDateTime.now().toString();
 
     assertEquals(
         Expressions.equal("test", "(timestamp-about-now)"),
@@ -475,8 +473,7 @@ public class TestExpressionUtil {
 
   @Test
   public void testSanitizeTimestamptzPast() {
-    String ninetyMinutesAgoUtc =
-        OffsetDateTime.now().atZoneSameInstant(ZoneOffset.UTC).minusMinutes(90).toString();
+    String ninetyMinutesAgoUtc = OffsetDateTime.now().minusMinutes(90).toString();
 
     assertEquals(
         Expressions.equal("test", "(timestamp-1-hours-ago)"),
@@ -498,8 +495,7 @@ public class TestExpressionUtil {
 
   @Test
   public void testSanitizeTimestamptzLastWeek() {
-    String lastWeekUtc =
-        OffsetDateTime.now().atZoneSameInstant(ZoneOffset.UTC).minusHours(180).toString();
+    String lastWeekUtc = OffsetDateTime.now().minusHours(180).toString();
 
     assertEquals(
         Expressions.equal("test", "(timestamp-7-days-ago)"),
@@ -521,8 +517,7 @@ public class TestExpressionUtil {
 
   @Test
   public void testSanitizeTimestamptzFuture() {
-    String ninetyMinutesFromNowUtc =
-        OffsetDateTime.now().atZoneSameInstant(ZoneOffset.UTC).plusMinutes(90).toString();
+    String ninetyMinutesFromNowUtc = OffsetDateTime.now().plusMinutes(90).toString();
 
     assertEquals(
         Expressions.equal("test", "(timestamp-1-hours-from-now)"),
