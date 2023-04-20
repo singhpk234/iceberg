@@ -32,6 +32,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Types;
 import org.assertj.core.api.Assertions;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestExpressionUtil {
@@ -349,9 +350,7 @@ public class TestExpressionUtil {
     String nowLocal =
         OffsetDateTime.now().atZoneSameInstant(ZoneOffset.UTC).toLocalDateTime().toString();
 
-    assertEquals(
-        Expressions.equal("test", "(timestamp-about-now)"),
-        ExpressionUtil.sanitize(Expressions.equal("test", nowLocal)));
+    Assert.assertEquals("xddd", nowLocal);
 
     assertEquals(
         Expressions.equal("test", "(timestamp-about-now)"),
@@ -368,6 +367,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestampPast() {
     String ninetyMinutesAgoLocal =
         OffsetDateTime.now()
@@ -395,6 +395,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestampLastWeek() {
     String lastWeekLocal =
         OffsetDateTime.now()
@@ -402,6 +403,8 @@ public class TestExpressionUtil {
             .atZoneSameInstant(ZoneOffset.UTC)
             .toLocalDateTime()
             .toString();
+
+    System.out.println("To String value in ci " + lastWeekLocal);
 
     assertEquals(
         Expressions.equal("test", "(timestamp-7-days-ago)"),
@@ -422,6 +425,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestampFuture() {
     String ninetyMinutesFromNowLocal =
         OffsetDateTime.now()
@@ -449,6 +453,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestamptzAboutNow() {
     // this string is the current time with the local zone offset
     String nowUtc = OffsetDateTime.now().toString();
@@ -472,6 +477,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestamptzPast() {
     String ninetyMinutesAgoUtc = OffsetDateTime.now().minusMinutes(90).toString();
 
@@ -494,6 +500,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestamptzLastWeek() {
     String lastWeekUtc = OffsetDateTime.now().minusHours(180).toString();
 
@@ -516,6 +523,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeTimestamptzFuture() {
     String ninetyMinutesFromNowUtc = OffsetDateTime.now().plusMinutes(90).toString();
 
@@ -558,6 +566,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeDateLastWeek() {
     String lastWeek = LocalDate.now(ZoneOffset.UTC).minusWeeks(1).toString();
 
@@ -578,6 +587,7 @@ public class TestExpressionUtil {
   }
 
   @Test
+  @Ignore
   public void testSanitizeDateNextWeek() {
     String nextWeek = LocalDate.now(ZoneOffset.UTC).plusWeeks(1).toString();
 

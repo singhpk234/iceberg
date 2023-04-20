@@ -447,6 +447,7 @@ public class ExpressionUtil {
 
   private static String sanitizeSimpleString(CharSequence value) {
     // hash the value and return the hash as hex
+    System.out.println("Garbage value " + value);
     return String.format("(hash-%08x)", HASH_FUNC.apply(value));
   }
 
