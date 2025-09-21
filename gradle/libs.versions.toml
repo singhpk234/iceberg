@@ -82,6 +82,7 @@ roaringbitmap = "1.3.0"
 scala-collection-compat = "2.13.0"
 slf4j = "2.0.17"
 snowflake-jdbc = "3.26.1"
+spark-snowflake = "3.1.4"
 spark34 = "3.4.4"
 spark35 = "3.5.6"
 spark40 = "4.0.1"
@@ -171,7 +172,7 @@ scala-collection-compat = { module = "org.scala-lang.modules:scala-collection-co
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 snowflake-jdbc = { module = "net.snowflake:snowflake-jdbc", version.ref = "snowflake-jdbc" }
-
+spark-snowflake = { module = "net.snowflake:spark-snowflake_2.12", version.ref = "spark-snowflake" }
 # test libraries
 apiguardian = { module = "org.apiguardian:apiguardian-api", version.ref = "apiguardian" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj-core" }

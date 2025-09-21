@@ -76,6 +76,8 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
     }
 
     compileOnly "org.apache.datafusion:comet-spark-spark${sparkMajorVersion}_${scalaVersion}:${libs.versions.comet.get()}"
+    
+    compileOnly libs.spark.snowflake
 
     implementation libs.parquet.column
     implementation libs.parquet.hadoop
@@ -165,6 +167,7 @@ project(":iceberg-spark:iceberg-spark-extensions-${sparkMajorVersion}_${scalaVer
       exclude group: 'org.roaringbitmap'
     }
     compileOnly libs.errorprone.annotations
+    compileOnly libs.spark.snowflake
 
     testImplementation project(path: ':iceberg-data')
     testImplementation project(path: ':iceberg-parquet')
@@ -253,6 +256,7 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
     implementation (project(':iceberg-snowflake')) {
       exclude group: 'net.snowflake' , module: 'snowflake-jdbc'
     }
+    implementation libs.spark.snowflake
 
     integrationImplementation "org.scala-lang.modules:scala-collection-compat_${scalaVersion}:${libs.versions.scala.collection.compat.get()}"
     integrationImplementation "org.apache.spark:spark-hive_${scalaVersion}:${libs.versions.spark35.get()}"

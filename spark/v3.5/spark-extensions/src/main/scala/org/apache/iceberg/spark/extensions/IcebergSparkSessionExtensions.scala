@@ -23,6 +23,7 @@ import org.apache.spark.sql.SparkSessionExtensions
 import org.apache.spark.sql.catalyst.analysis.CheckViews
 import org.apache.spark.sql.catalyst.analysis.ProcedureArgumentCoercion
 import org.apache.spark.sql.catalyst.analysis.ResolveProcedures
+import org.apache.spark.sql.catalyst.analysis.ResolveSnowflakeRelations
 import org.apache.spark.sql.catalyst.analysis.ResolveViews
 import org.apache.spark.sql.catalyst.analysis.RewriteMergeIntoTableForRowLineage
 import org.apache.spark.sql.catalyst.analysis.RewriteUpdateTableForRowLineage
@@ -40,6 +41,7 @@ class IcebergSparkSessionExtensions extends (SparkSessionExtensions => Unit) {
     // analyzer extensions
     extensions.injectResolutionRule { spark => ResolveProcedures(spark) }
     extensions.injectResolutionRule { spark => ResolveViews(spark) }
+    extensions.injectResolutionRule { spark => ResolveSnowflakeRelations(spark) }
     extensions.injectResolutionRule { _ => ProcedureArgumentCoercion }
     extensions.injectCheckRule(_ => CheckViews)
     extensions.injectResolutionRule { _ => RewriteUpdateTableForRowLineage}
