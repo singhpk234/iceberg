@@ -322,6 +322,14 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
     archiveClassifier.set(null)
   }
 
+  tasks.withType(JavaExec) {
+    jvmArgs += [
+            "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+            "--add-opens=java.base/java.nio=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED"
+    ]
+  }
+
   task integrationTest(type: Test) {
     useJUnitPlatform()
     description = "Test Spark3 Runtime Jar against Spark ${sparkMajorVersion}"
