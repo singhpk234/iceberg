@@ -306,6 +306,21 @@ public class Expressions {
   }
 
   /**
+   * Constructs a resolved reference for a given column.
+   *
+   * <p>The following are equivalent: equals("a", 5) and if a fieldId is 1 and equals(ref("a", 1),
+   * 5).
+   *
+   * @param name a column name
+   * @param fieldId the field ID of the column
+   * @param <T> the Java type of this reference
+   * @return a named reference
+   */
+  public static <T> ResolvedReference<T> ref(String name, int fieldId) {
+    return new ResolvedReference<>(name, fieldId);
+  }
+
+  /**
    * Constructs a transform expression for a given column.
    *
    * @param name a column name
