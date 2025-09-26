@@ -28,17 +28,16 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.function.Supplier;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.JsonUtil;
 import org.junit.jupiter.api.Test;
 
 /**
- * Test demonstrating how ExpressionParser could be enhanced to support field IDs 
- * for ResolvedReference serialization/deserialization.
- * 
- * This is a proof of concept showing the enhanced JSON format that would preserve
- * field ID information during serialization round-trips.
+ * Test demonstrating how ExpressionParser could be enhanced to support field IDs for
+ * ResolvedReference serialization/deserialization.
+ *
+ * <p>This is a proof of concept showing the enhanced JSON format that would preserve field ID
+ * information during serialization round-trips.
  */
 public class TestEnhancedExpressionParserWithFieldIds {
 
@@ -58,44 +57,46 @@ public class TestEnhancedExpressionParserWithFieldIds {
   public void testEnhancedJsonFormatWithFieldIds() {
     // Test the enhanced JSON format that would support field IDs
     Expression resolvedExpr = Expressions.equal(Expressions.ref("data", 101), "test");
-    
+
     // Generate enhanced JSON manually to show the concept
     String enhancedJson = generateEnhancedJson(resolvedExpr);
-    
+
     // Expected enhanced JSON structure with field ID
-    String expectedJson = "{\n" +
-        "  \"type\" : \"eq\",\n" +
-        "  \"term\" : {\n" +
-        "    \"type\" : \"resolved-reference\",\n" +
-        "    \"name\" : \"data\",\n" +
-        "    \"field-id\" : 101\n" +
-        "  },\n" +
-        "  \"value\" : \"test\"\n" +
-        "}";
-    
+    String expectedJson =
+        "{\n"
+            + "  \"type\" : \"eq\",\n"
+            + "  \"term\" : {\n"
+            + "    \"type\" : \"resolved-reference\",\n"
+            + "    \"name\" : \"data\",\n"
+            + "    \"field-id\" : 101\n"
+            + "  },\n"
+            + "  \"value\" : \"test\"\n"
+            + "}";
+
     assertThat(enhancedJson).isEqualTo(expectedJson);
   }
 
   @Test
   public void testEnhancedParsingWithFieldIds() {
     // Test parsing enhanced JSON that includes field IDs
-    String enhancedJson = "{\n" +
-        "  \"type\" : \"eq\",\n" +
-        "  \"term\" : {\n" +
-        "    \"type\" : \"resolved-reference\",\n" +
-        "    \"name\" : \"data\",\n" +
-        "    \"field-id\" : 101\n" +
-        "  },\n" +
-        "  \"value\" : \"test\"\n" +
-        "}";
-    
+    String enhancedJson =
+        "{\n"
+            + "  \"type\" : \"eq\",\n"
+            + "  \"term\" : {\n"
+            + "    \"type\" : \"resolved-reference\",\n"
+            + "    \"name\" : \"data\",\n"
+            + "    \"field-id\" : 101\n"
+            + "  },\n"
+            + "  \"value\" : \"test\"\n"
+            + "}";
+
     // Parse using enhanced parser (concept)
     Expression parsed = parseEnhancedJson(enhancedJson);
-    
+
     assertThat(parsed).isInstanceOf(UnboundPredicate.class);
     UnboundPredicate<?> predicate = (UnboundPredicate<?>) parsed;
     assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
-    
+
     ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
     assertThat(resolvedRef.name()).isEqualTo("data");
     assertThat(resolvedRef.fieldId()).isEqualTo(101);
@@ -104,18 +105,19 @@ public class TestEnhancedExpressionParserWithFieldIds {
   @Test
   public void testBackwardCompatibilityWithExistingFormat() {
     // Test that enhanced parser can handle existing JSON format without field IDs
-    String standardJson = "{\n" +
-        "  \"type\" : \"eq\",\n" +
-        "  \"term\" : \"data\",\n" +
-        "  \"value\" : \"test\"\n" +
-        "}";
-    
+    String standardJson =
+        "{\n"
+            + "  \"type\" : \"eq\",\n"
+            + "  \"term\" : \"data\",\n"
+            + "  \"value\" : \"test\"\n"
+            + "}";
+
     Expression parsed = parseEnhancedJson(standardJson);
-    
+
     assertThat(parsed).isInstanceOf(UnboundPredicate.class);
     UnboundPredicate<?> predicate = (UnboundPredicate<?>) parsed;
     assertThat(predicate.term()).isInstanceOf(NamedReference.class);
-    
+
     NamedReference<?> namedRef = (NamedReference<?>) predicate.term();
     assertThat(namedRef.name()).isEqualTo("data");
   }
@@ -123,28 +125,29 @@ public class TestEnhancedExpressionParserWithFieldIds {
   @Test
   public void testComplexExpressionWithMixedReferences() {
     // Test complex expression with both ResolvedReference and NamedReference
-    Expression mixedExpr = Expressions.and(
-        Expressions.equal(Expressions.ref("data", 101), "test"), // ResolvedReference
-        Expressions.isNull("active")); // NamedReference
-    
+    Expression mixedExpr =
+        Expressions.and(
+            Expressions.equal(Expressions.ref("data", 101), "test"), // ResolvedReference
+            Expressions.isNull("active")); // NamedReference
+
     String enhancedJson = generateEnhancedJson(mixedExpr);
-    
+
     // Should contain both reference types in JSON
     assertThat(enhancedJson).contains("\"resolved-reference\"");
     assertThat(enhancedJson).contains("\"field-id\" : 101");
     assertThat(enhancedJson).contains("\"active\"");
-    
+
     // Parse back and verify
     Expression parsed = parseEnhancedJson(enhancedJson);
     assertThat(parsed).isInstanceOf(And.class);
-    
+
     And andExpr = (And) parsed;
-    
+
     // Left side should be ResolvedReference
     UnboundPredicate<?> leftPred = (UnboundPredicate<?>) andExpr.left();
     assertThat(leftPred.term()).isInstanceOf(ResolvedReference.class);
-    
-    // Right side should be NamedReference  
+
+    // Right side should be NamedReference
     UnboundPredicate<?> rightPred = (UnboundPredicate<?>) andExpr.right();
     assertThat(rightPred.term()).isInstanceOf(NamedReference.class);
   }
@@ -152,26 +155,27 @@ public class TestEnhancedExpressionParserWithFieldIds {
   @Test
   public void testFieldIdPreservationThroughRoundTrip() {
     // Test that field IDs are preserved through complete round-trip
-    Expression original = Expressions.and(
-        Expressions.greaterThan(Expressions.ref("id", 100), 50L),
-        Expressions.equal(Expressions.ref("data", 101), "test"));
-    
+    Expression original =
+        Expressions.and(
+            Expressions.greaterThan(Expressions.ref("id", 100), 50L),
+            Expressions.equal(Expressions.ref("data", 101), "test"));
+
     // Generate enhanced JSON
     String json = generateEnhancedJson(original);
-    
+
     // Parse back
     Expression parsed = parseEnhancedJson(json);
-    
+
     // Verify structure is preserved
     assertThat(parsed).isInstanceOf(And.class);
     And andExpr = (And) parsed;
-    
+
     // Check left predicate (id > 50)
     UnboundPredicate<?> leftPred = (UnboundPredicate<?>) andExpr.left();
     ResolvedReference<?> leftRef = (ResolvedReference<?>) leftPred.term();
     assertThat(leftRef.name()).isEqualTo("id");
     assertThat(leftRef.fieldId()).isEqualTo(100);
-    
+
     // Check right predicate (data = "test")
     UnboundPredicate<?> rightPred = (UnboundPredicate<?>) andExpr.right();
     ResolvedReference<?> rightRef = (ResolvedReference<?>) rightPred.term();
@@ -182,13 +186,15 @@ public class TestEnhancedExpressionParserWithFieldIds {
   // Helper methods to demonstrate enhanced JSON generation and parsing
 
   private String generateEnhancedJson(Expression expr) {
-    return JsonUtil.generate(gen -> {
-      try {
-        generateEnhanced(expr, gen);
-      } catch (IOException e) {
-        throw new UncheckedIOException(e);
-      }
-    }, true);
+    return JsonUtil.generate(
+        gen -> {
+          try {
+            generateEnhanced(expr, gen);
+          } catch (IOException e) {
+            throw new UncheckedIOException(e);
+          }
+        },
+        true);
   }
 
   private void generateEnhanced(Expression expr, JsonGenerator gen) throws IOException {
@@ -205,7 +211,8 @@ public class TestEnhancedExpressionParserWithFieldIds {
   }
 
   // Enhanced JSON visitor that supports field IDs
-  private static class EnhancedJsonVisitor extends ExpressionVisitors.CustomOrderExpressionVisitor<Void> {
+  private static class EnhancedJsonVisitor
+      extends ExpressionVisitors.CustomOrderExpressionVisitor<Void> {
     private final JsonGenerator gen;
 
     EnhancedJsonVisitor(JsonGenerator gen) {
@@ -227,103 +234,109 @@ public class TestEnhancedExpressionParserWithFieldIds {
 
     @Override
     public Void alwaysTrue() {
-      return generate(() -> {
-        try {
-          gen.writeBoolean(true);
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      });
+      return generate(
+          () -> {
+            try {
+              gen.writeBoolean(true);
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
+          });
     }
 
     @Override
     public Void alwaysFalse() {
-      return generate(() -> {
-        try {
-          gen.writeBoolean(false);
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      });
+      return generate(
+          () -> {
+            try {
+              gen.writeBoolean(false);
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
+          });
     }
 
     @Override
     public Void not(Supplier<Void> result) {
-      return generate(() -> {
-        try {
-          gen.writeStartObject();
-          gen.writeStringField("type", "not");
-          gen.writeFieldName("child");
-          toJson(result);
-          gen.writeEndObject();
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      });
+      return generate(
+          () -> {
+            try {
+              gen.writeStartObject();
+              gen.writeStringField("type", "not");
+              gen.writeFieldName("child");
+              toJson(result);
+              gen.writeEndObject();
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
+          });
     }
 
     @Override
     public Void and(Supplier<Void> leftResult, Supplier<Void> rightResult) {
-      return generate(() -> {
-        try {
-          gen.writeStartObject();
-          gen.writeStringField("type", "and");
-          gen.writeFieldName("left");
-          toJson(leftResult);
-          gen.writeFieldName("right");
-          toJson(rightResult);
-          gen.writeEndObject();
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      });
+      return generate(
+          () -> {
+            try {
+              gen.writeStartObject();
+              gen.writeStringField("type", "and");
+              gen.writeFieldName("left");
+              toJson(leftResult);
+              gen.writeFieldName("right");
+              toJson(rightResult);
+              gen.writeEndObject();
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
+          });
     }
 
     @Override
     public Void or(Supplier<Void> leftResult, Supplier<Void> rightResult) {
-      return generate(() -> {
-        try {
-          gen.writeStartObject();
-          gen.writeStringField("type", "or");
-          gen.writeFieldName("left");
-          toJson(leftResult);
-          gen.writeFieldName("right");
-          toJson(rightResult);
-          gen.writeEndObject();
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      });
+      return generate(
+          () -> {
+            try {
+              gen.writeStartObject();
+              gen.writeStringField("type", "or");
+              gen.writeFieldName("left");
+              toJson(leftResult);
+              gen.writeFieldName("right");
+              toJson(rightResult);
+              gen.writeEndObject();
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
+            }
+          });
     }
 
     @Override
     public <T> Void predicate(UnboundPredicate<T> pred) {
-      return generate(() -> {
-        try {
-          gen.writeStartObject();
-          gen.writeStringField("type", pred.op().toString().toLowerCase().replace("_", "-"));
-          gen.writeFieldName("term");
-          writeTerm(pred.term());
-          
-          if (pred.literals() != null && !pred.literals().isEmpty()) {
-            if (pred.literals().size() == 1) {
-              gen.writeFieldName("value");
-              writeLiteral(pred.literals().get(0));
-            } else {
-              gen.writeFieldName("values");
-              gen.writeStartArray();
-              for (Literal<T> literal : pred.literals()) {
-                writeLiteral(literal);
+      return generate(
+          () -> {
+            try {
+              gen.writeStartObject();
+              gen.writeStringField("type", pred.op().toString().toLowerCase().replace("_", "-"));
+              gen.writeFieldName("term");
+              writeTerm(pred.term());
+
+              if (pred.literals() != null && !pred.literals().isEmpty()) {
+                if (pred.literals().size() == 1) {
+                  gen.writeFieldName("value");
+                  writeLiteral(pred.literals().get(0));
+                } else {
+                  gen.writeFieldName("values");
+                  gen.writeStartArray();
+                  for (Literal<T> literal : pred.literals()) {
+                    writeLiteral(literal);
+                  }
+                  gen.writeEndArray();
+                }
               }
-              gen.writeEndArray();
+
+              gen.writeEndObject();
+            } catch (IOException e) {
+              throw new UncheckedIOException(e);
             }
-          }
-          
-          gen.writeEndObject();
-        } catch (IOException e) {
-          throw new UncheckedIOException(e);
-        }
-      });
+          });
     }
 
     private void writeTerm(UnboundTerm<?> term) throws IOException {
@@ -385,12 +398,10 @@ public class TestEnhancedExpressionParserWithFieldIds {
         return Expressions.not(parseEnhancedExpression(JsonUtil.get("child", node)));
       case "eq":
         return Expressions.equal(
-            parseEnhancedTerm(JsonUtil.get("term", node)),
-            parseValue(JsonUtil.get("value", node)));
+            parseEnhancedTerm(JsonUtil.get("term", node)), parseValue(JsonUtil.get("value", node)));
       case "gt":
         return Expressions.greaterThan(
-            parseEnhancedTerm(JsonUtil.get("term", node)),
-            parseValue(JsonUtil.get("value", node)));
+            parseEnhancedTerm(JsonUtil.get("term", node)), parseValue(JsonUtil.get("value", node)));
       case "is-null":
         return Expressions.isNull(parseEnhancedTerm(JsonUtil.get("term", node)));
       default:

@@ -65,7 +65,7 @@ public class TestResolvedReference {
   @Test
   public void testResolvedReferenceBindIgnoresCaseSensitivity() {
     ResolvedReference<Integer> ref = new ResolvedReference<>("A", 34);
-    
+
     // Should work regardless of case sensitivity since we use fieldId
     BoundTerm<Integer> bound1 = ref.bind(SCHEMA.asStruct(), true);
     BoundTerm<Integer> bound2 = ref.bind(SCHEMA.asStruct(), false);
@@ -79,7 +79,7 @@ public class TestResolvedReference {
   @Test
   public void testResolvedReferenceBindWithInvalidFieldId() {
     ResolvedReference<Integer> ref = new ResolvedReference<>("invalid", 999);
-    
+
     assertThatThrownBy(() -> ref.bind(SCHEMA.asStruct(), true))
         .isInstanceOf(ValidationException.class)
         .hasMessageContaining("Cannot find field 'invalid' in struct");
@@ -89,14 +89,14 @@ public class TestResolvedReference {
   public void testResolvedReferenceRef() {
     ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
     NamedReference<?> namedRef = ref.ref();
-    
+
     assertThat(namedRef.name()).isEqualTo("a");
   }
 
   @Test
   public void testResolvedReferenceToString() {
     ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
-    
+
     assertThat(ref.toString()).isEqualTo("ref(name=\"a\", fieldId=\"34\")");
   }
 
@@ -105,10 +105,10 @@ public class TestResolvedReference {
     // Test that ResolvedReference works in expression predicates
     Expression expr = Expressions.equal(Expressions.ref("a", 34), 5);
     assertThat(expr).isInstanceOf(UnboundPredicate.class);
-    
+
     UnboundPredicate<?> predicate = (UnboundPredicate<?>) expr;
     assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
-    
+
     ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
     assertThat(resolvedRef.name()).isEqualTo("a");
     assertThat(resolvedRef.fieldId()).isEqualTo(34);
@@ -119,13 +119,13 @@ public class TestResolvedReference {
     // Test that unbinding a bound reference returns a NamedReference for compatibility
     Expression expr = Expressions.equal(Expressions.ref("a", 34), 5);
     Expression boundExpr = Binder.bind(SCHEMA.asStruct(), expr, true);
-    
+
     assertThat(boundExpr).isInstanceOf(BoundPredicate.class);
     BoundPredicate<?> boundPred = (BoundPredicate<?>) boundExpr;
-    
+
     UnboundTerm<?> unbound = ExpressionUtil.unbind(boundPred.term());
     assertThat(unbound).isInstanceOf(NamedReference.class);
-    
+
     NamedReference<?> namedRef = (NamedReference<?>) unbound;
     assertThat(namedRef.name()).isEqualTo("a");
   }

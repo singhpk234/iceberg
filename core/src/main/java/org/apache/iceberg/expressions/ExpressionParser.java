@@ -252,7 +252,10 @@ public class ExpressionParser {
       } else if (term instanceof ResolvedTransform) {
         ResolvedTransform<?, ?> transform = (ResolvedTransform<?, ?>) term;
         if (includeFieldIds) {
-          transformWithFieldId(transform.transform().toString(), transform.resolvedRef().name(), transform.resolvedRef().fieldId());
+          transformWithFieldId(
+              transform.transform().toString(),
+              transform.resolvedRef().name(),
+              transform.resolvedRef().fieldId());
         } else {
           transform(transform.transform().toString(), transform.ref().name());
         }
@@ -260,7 +263,8 @@ public class ExpressionParser {
       } else if (term instanceof BoundTransform) {
         BoundTransform<?, ?> transform = (BoundTransform<?, ?>) term;
         if (includeFieldIds) {
-          transformWithFieldId(transform.transform().toString(), transform.ref().name(), transform.ref().fieldId());
+          transformWithFieldId(
+              transform.transform().toString(), transform.ref().name(), transform.ref().fieldId());
         } else {
           transform(transform.transform().toString(), transform.ref().name());
         }
@@ -289,7 +293,8 @@ public class ExpressionParser {
       gen.writeEndObject();
     }
 
-    private void transformWithFieldId(String transform, String name, int fieldId) throws IOException {
+    private void transformWithFieldId(String transform, String name, int fieldId)
+        throws IOException {
       gen.writeStartObject();
       gen.writeStringField(TYPE, TRANSFORM);
       gen.writeStringField(TRANSFORM, transform);
