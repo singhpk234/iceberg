@@ -62,16 +62,27 @@ public class ExpressionParser {
     return JsonUtil.generate(gen -> toJson(expression, gen), pretty);
   }
 
+  public static String toJson(Expression expression, boolean pretty, boolean includeFieldIds) {
+    Preconditions.checkArgument(expression != null, "Invalid expression: null");
+    return JsonUtil.generate(gen -> toJson(expression, gen, includeFieldIds), pretty);
+  }
+
   public static void toJson(Expression expression, JsonGenerator gen) {
-    ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen));
+    ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen, false));
+  }
+
+  public static void toJson(Expression expression, JsonGenerator gen, boolean includeFieldIds) {
+    ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen, includeFieldIds));
   }
 
   private static class JsonGeneratorVisitor
       extends ExpressionVisitors.CustomOrderExpressionVisitor<Void> {
     private final JsonGenerator gen;
+    private final boolean includeFieldIds;
 
-    private JsonGeneratorVisitor(JsonGenerator gen) {
+    private JsonGeneratorVisitor(JsonGenerator gen, boolean includeFieldIds) {
       this.gen = gen;
+      this.includeFieldIds = includeFieldIds;
     }
 
     /**
@@ -238,9 +249,29 @@ public class ExpressionParser {
         UnboundTransform<?, ?> transform = (UnboundTransform<?, ?>) term;
         transform(transform.transform().toString(), transform.ref().name());
         return;
+      } else if (term instanceof ResolvedTransform) {
+        ResolvedTransform<?, ?> transform = (ResolvedTransform<?, ?>) term;
+        if (includeFieldIds) {
+          transformWithFieldId(transform.transform().toString(), transform.resolvedRef().name(), transform.resolvedRef().fieldId());
+        } else {
+          transform(transform.transform().toString(), transform.ref().name());
+        }
+        return;
       } else if (term instanceof BoundTransform) {
         BoundTransform<?, ?> transform = (BoundTransform<?, ?>) term;
-        transform(transform.transform().toString(), transform.ref().name());
+        if (includeFieldIds) {
+          transformWithFieldId(transform.transform().toString(), transform.ref().name(), transform.ref().fieldId());
+        } else {
+          transform(transform.transform().toString(), transform.ref().name());
+        }
+        return;
+      } else if (term instanceof BoundReference) {
+        BoundReference<?> ref = (BoundReference<?>) term;
+        if (includeFieldIds) {
+          referenceWithFieldId(ref.name(), ref.fieldId());
+        } else {
+          gen.writeString(ref.name());
+        }
         return;
       } else if (term instanceof Reference) {
         gen.writeString(((Reference<?>) term).name());
@@ -255,6 +286,24 @@ public class ExpressionParser {
       gen.writeStringField(TYPE, TRANSFORM);
       gen.writeStringField(TRANSFORM, transform);
       gen.writeStringField(TERM, name);
+      gen.writeEndObject();
+    }
+
+    private void transformWithFieldId(String transform, String name, int fieldId) throws IOException {
+      gen.writeStartObject();
+      gen.writeStringField(TYPE, TRANSFORM);
+      gen.writeStringField(TRANSFORM, transform);
+      // Write term as a ResolvedReference object
+      gen.writeFieldName(TERM);
+      referenceWithFieldId(name, fieldId);
+      gen.writeEndObject();
+    }
+
+    private void referenceWithFieldId(String name, int fieldId) throws IOException {
+      gen.writeStartObject();
+      gen.writeStringField("type", "ref");
+      gen.writeStringField("name", name);
+      gen.writeNumberField("fieldId", fieldId);
       gen.writeEndObject();
     }
   }

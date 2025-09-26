@@ -58,6 +58,23 @@ public class ResolvedReference<T> implements UnboundTerm<T>, Reference<T> {
   }
 
   @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    ResolvedReference<?> that = (ResolvedReference<?>) o;
+    return fieldId == that.fieldId && name.equals(that.name);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * fieldId + name.hashCode();
+  }
+
+  @Override
   public String toString() {
     return String.format("ref(name=\"%s\", fieldId=\"%s\")", name, fieldId);
   }
