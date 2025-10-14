@@ -44,10 +44,13 @@ public class ResolvedReference<T> implements UnboundTerm<T>, Reference<T> {
   public BoundTerm<T> bind(Types.StructType struct, boolean caseSensitive) {
     // assumption is that we always have the field id
     Schema schema = struct.asSchema();
-    // we ignore case sensitivity here because field ids are unique
+    // Ignore caseSensitive because the field is referenced by id
     Types.NestedField field = schema.findField(fieldId);
     ValidationException.check(
-        field != null, "Cannot find field '%s' in struct: %s", name, schema.asStruct());
+        field != null,
+        "Cannot find field with id '%s' in struct: %s, since we are resolving based on ID",
+        fieldId,
+        schema.asStruct());
 
     return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name);
   }
@@ -62,9 +65,11 @@ public class ResolvedReference<T> implements UnboundTerm<T>, Reference<T> {
     if (this == o) {
       return true;
     }
+
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
+
     ResolvedReference<?> that = (ResolvedReference<?>) o;
     return fieldId == that.fieldId && name.equals(that.name);
   }

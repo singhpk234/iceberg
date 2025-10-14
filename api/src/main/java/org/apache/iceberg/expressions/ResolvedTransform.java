@@ -22,7 +22,7 @@ import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.transforms.Transform;
 import org.apache.iceberg.types.Types;
 
-public class ResolvedTransform<S, T> implements UnboundTerm<T>, Term {
+public class ResolvedTransform<S, T> implements UnboundTerm<T> {
   private final ResolvedReference<S> ref;
   private final Transform<S, T> transform;
 
@@ -74,9 +74,11 @@ public class ResolvedTransform<S, T> implements UnboundTerm<T>, Term {
     if (this == o) {
       return true;
     }
+
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
+
     ResolvedTransform<?, ?> that = (ResolvedTransform<?, ?>) o;
     return ref.equals(that.ref) && transform.equals(that.transform);
   }
