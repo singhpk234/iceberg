@@ -51,10 +51,11 @@ public class ResolvedTransform<S, T> implements UnboundTerm<T> {
     try {
       ValidationException.check(
           transform.canTransform(boundRef.type()),
-          "Cannot bind: %s cannot transform %s values from '%s'",
+          "Cannot bind: %s cannot transform %s values from '%s' with field id %s",
           transform,
           boundRef.type(),
-          ref.name());
+          ref.name(),
+          ref.fieldId());
     } catch (IllegalArgumentException e) {
       throw new ValidationException(
           "Cannot bind: %s cannot transform %s values from '%s'",

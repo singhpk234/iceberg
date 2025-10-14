@@ -82,7 +82,8 @@ public class TestResolvedReference {
 
     assertThatThrownBy(() -> ref.bind(SCHEMA.asStruct(), true))
         .isInstanceOf(ValidationException.class)
-        .hasMessageContaining("Cannot find field 'invalid' in struct");
+        .hasMessageContaining(
+            "Cannot find field with id '999' in struct: struct<34: a: optional int, 35: s: required string>, since we are resolving based on ID");
   }
 
   @Test
