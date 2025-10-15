@@ -20,32 +20,24 @@ package org.apache.iceberg.expressions;
 
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.ValidationException;
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.types.Types;
 
-public class NamedReference<T> implements UnboundTerm<T>, Reference<T> {
-  private final String name;
+public class NamedReference<T> extends UnboundReference<T> {
 
   NamedReference(String name) {
-    Preconditions.checkNotNull(name, "Name cannot be null");
-    this.name = name;
-  }
-
-  @Override
-  public String name() {
-    return name;
+    super(name);
   }
 
   @Override
   public BoundReference<T> bind(Types.StructType struct, boolean caseSensitive) {
     Schema schema = struct.asSchema();
     Types.NestedField field =
-        caseSensitive ? schema.findField(name) : schema.caseInsensitiveFindField(name);
+        caseSensitive ? schema.findField(name()) : schema.caseInsensitiveFindField(name());
 
     ValidationException.check(
-        field != null, "Cannot find field '%s' in struct: %s", name, schema.asStruct());
+        field != null, "Cannot find field '%s' in struct: %s", name(), schema.asStruct());
 
-    return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name);
+    return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name());
   }
 
   @Override
@@ -55,6 +47,6 @@ public class NamedReference<T> implements UnboundTerm<T>, Reference<T> {
 
   @Override
   public String toString() {
-    return String.format("ref(name=\"%s\")", name);
+    return String.format("ref(name=\"%s\")", name());
   }
 }

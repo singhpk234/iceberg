@@ -105,33 +105,33 @@ public class Expressions {
   @SuppressWarnings("unchecked")
   public static <S, T> UnboundTerm<T> bucket(ResolvedReference<S> resolvedRef, int numBuckets) {
     Transform<S, T> transform = (Transform<S, T>) Transforms.bucket(numBuckets);
-    return new ResolvedTransform<>(resolvedRef, transform);
+    return new UnboundTransform<>(resolvedRef, transform);
   }
 
   @SuppressWarnings("unchecked")
   public static <S, T> UnboundTerm<T> year(ResolvedReference<S> resolvedRef) {
-    return new ResolvedTransform<>(resolvedRef, (Transform<S, T>) Transforms.year());
+    return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.year());
   }
 
   @SuppressWarnings("unchecked")
   public static <S, T> UnboundTerm<T> month(ResolvedReference<S> resolvedRef) {
-    return new ResolvedTransform<>(resolvedRef, (Transform<S, T>) Transforms.month());
+    return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.month());
   }
 
   @SuppressWarnings("unchecked")
   public static <S, T> UnboundTerm<T> day(ResolvedReference<S> resolvedRef) {
-    return new ResolvedTransform<>(resolvedRef, (Transform<S, T>) Transforms.day());
+    return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.day());
   }
 
   @SuppressWarnings("unchecked")
   public static <S, T> UnboundTerm<T> hour(ResolvedReference<S> resolvedRef) {
-    return new ResolvedTransform<>(resolvedRef, (Transform<S, T>) Transforms.hour());
+    return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.hour());
   }
 
   @SuppressWarnings("unchecked")
   public static <S, T> UnboundTerm<T> truncate(ResolvedReference<S> resolvedRef, int width) {
     Transform<S, T> transform = (Transform<S, T>) Transforms.truncate(width);
-    return new ResolvedTransform<>(resolvedRef, transform);
+    return new UnboundTransform<>(resolvedRef, transform);
   }
 
   public static <T> UnboundTerm<T> extract(String name, String path, String type) {

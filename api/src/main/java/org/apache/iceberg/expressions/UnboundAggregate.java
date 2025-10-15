@@ -30,7 +30,7 @@ public class UnboundAggregate<T> extends Aggregate<UnboundTerm<T>>
   }
 
   @Override
-  public NamedReference<?> ref() {
+  public UnboundReference<?> ref() {
     return term().ref();
   }
 

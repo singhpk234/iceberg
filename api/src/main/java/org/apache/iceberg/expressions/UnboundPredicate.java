@@ -62,7 +62,7 @@ public class UnboundPredicate<T> extends Predicate<T, UnboundTerm<T>>
   }
 
   @Override
-  public NamedReference<?> ref() {
+  public UnboundReference<?> ref() {
     return term().ref();
   }
 

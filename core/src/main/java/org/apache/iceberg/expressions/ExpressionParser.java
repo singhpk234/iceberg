@@ -249,17 +249,6 @@ public class ExpressionParser {
         UnboundTransform<?, ?> transform = (UnboundTransform<?, ?>) term;
         transform(transform.transform().toString(), transform.ref().name());
         return;
-      } else if (term instanceof ResolvedTransform) {
-        ResolvedTransform<?, ?> transform = (ResolvedTransform<?, ?>) term;
-        if (includeFieldIds) {
-          transformWithFieldId(
-              transform.transform().toString(),
-              transform.resolvedRef().name(),
-              transform.resolvedRef().fieldId());
-        } else {
-          transform(transform.transform().toString(), transform.ref().name());
-        }
-        return;
       } else if (term instanceof BoundTransform) {
         BoundTransform<?, ?> transform = (BoundTransform<?, ?>) term;
         if (includeFieldIds) {

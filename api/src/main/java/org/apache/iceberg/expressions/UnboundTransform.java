@@ -23,16 +23,20 @@ import org.apache.iceberg.transforms.Transform;
 import org.apache.iceberg.types.Types;
 
 public class UnboundTransform<S, T> implements UnboundTerm<T>, Term {
-  private final NamedReference<S> ref;
+  private final UnboundReference<S> ref;
   private final Transform<S, T> transform;
 
-  UnboundTransform(NamedReference<S> ref, Transform<S, T> transform) {
+  UnboundTransform(UnboundReference<S> ref, Transform<S, T> transform) {
     this.ref = ref;
     this.transform = transform;
   }
 
   @Override
-  public NamedReference<S> ref() {
+  public UnboundReference<S> ref() {
+    return ref;
+  }
+
+  public UnboundReference<S> unboundRef() {
     return ref;
   }
 
@@ -42,7 +46,7 @@ public class UnboundTransform<S, T> implements UnboundTerm<T>, Term {
 
   @Override
   public BoundTransform<S, T> bind(Types.StructType struct, boolean caseSensitive) {
-    BoundReference<S> boundRef = ref.bind(struct, caseSensitive);
+    BoundReference<S> boundRef = (BoundReference<S>) ref.bind(struct, caseSensitive);
 
     try {
       ValidationException.check(
@@ -50,7 +54,7 @@ public class UnboundTransform<S, T> implements UnboundTerm<T>, Term {
           "Cannot bind: %s cannot transform %s values from '%s'",
           transform,
           boundRef.type(),
-          ref.name());
+          ref.toString());
     } catch (IllegalArgumentException e) {
       throw new ValidationException(
           "Cannot bind: %s cannot transform %s values from '%s'",
