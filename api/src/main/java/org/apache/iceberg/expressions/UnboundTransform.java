@@ -23,20 +23,20 @@ import org.apache.iceberg.transforms.Transform;
 import org.apache.iceberg.types.Types;
 
 public class UnboundTransform<S, T> implements UnboundTerm<T>, Term {
-  private final UnboundReference<S> ref;
+  private final NamedReference<S> ref;
   private final Transform<S, T> transform;
 
-  UnboundTransform(UnboundReference<S> ref, Transform<S, T> transform) {
+  UnboundTransform(NamedReference<S> ref, Transform<S, T> transform) {
     this.ref = ref;
     this.transform = transform;
   }
 
   @Override
-  public UnboundReference<S> ref() {
+  public NamedReference<S> ref() {
     return ref;
   }
 
-  public UnboundReference<S> unboundRef() {
+  public NamedReference<S> unboundRef() {
     return ref;
   }
 

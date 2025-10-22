@@ -48,7 +48,7 @@ public class UnboundExtract<T> implements UnboundTerm<T> {
   }
 
   @Override
-  public UnboundReference<?> ref() {
+  public NamedReference<?> ref() {
     return ref;
   }
 

@@ -20,12 +20,20 @@ package org.apache.iceberg.expressions;
 
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.ValidationException;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.types.Types;
 
-public class NamedReference<T> extends UnboundReference<T> {
+public class NamedReference<T> implements UnboundTerm<T>, Reference<T> {
+  private final String name;
 
   NamedReference(String name) {
-    super(name);
+    Preconditions.checkNotNull(name, "Name cannot be null");
+    this.name = name;
+  }
+
+  @Override
+  public String name() {
+    return name;
   }
 
   @Override

@@ -22,7 +22,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.types.Types;
 
-public class ResolvedReference<T> extends UnboundReference<T> {
+public class ResolvedReference<T> extends NamedReference<T> {
   private final int fieldId;
 
   public ResolvedReference(String name, int fieldId) {
@@ -48,7 +48,7 @@ public class ResolvedReference<T> extends UnboundReference<T> {
   }
 
   @Override
-  public NamedReference<?> ref() {
+  public NamedReference<T> ref() {
     return new NamedReference<>(name());
   }
 

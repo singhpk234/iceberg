@@ -38,5 +38,5 @@ public interface Unbound<T, B> {
   B bind(Types.StructType struct, boolean caseSensitive);
 
   /** Returns this expression's underlying reference. */
-  UnboundReference<?> ref();
+  NamedReference<?> ref();
 }
