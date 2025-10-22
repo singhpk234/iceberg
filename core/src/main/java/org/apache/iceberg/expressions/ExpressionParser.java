@@ -34,6 +34,7 @@ import org.apache.iceberg.SingleValueParser;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
+import org.apache.iceberg.transforms.Transform;
 import org.apache.iceberg.transforms.Transforms;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.JsonUtil;
@@ -51,6 +52,11 @@ public class ExpressionParser {
   private static final String REFERENCE = "reference";
   private static final String LITERAL = "literal";
 
+  public enum SerializationMode {
+    NAMES_ONLY,
+    WITH_FIELD_IDS
+  }
+
   private ExpressionParser() {}
 
   public static String toJson(Expression expression) {
@@ -62,27 +68,45 @@ public class ExpressionParser {
     return JsonUtil.generate(gen -> toJson(expression, gen), pretty);
   }
 
+  public static String toJson(Expression expression, boolean pretty, SerializationMode mode) {
+    Preconditions.checkArgument(expression != null, "Invalid expression: null");
+    return JsonUtil.generate(gen -> toJson(expression, gen, mode), pretty);
+  }
+
+  @Deprecated
   public static String toJson(Expression expression, boolean pretty, boolean includeFieldIds) {
     Preconditions.checkArgument(expression != null, "Invalid expression: null");
-    return JsonUtil.generate(gen -> toJson(expression, gen, includeFieldIds), pretty);
+    return toJson(
+        expression,
+        pretty,
+        includeFieldIds ? SerializationMode.WITH_FIELD_IDS : SerializationMode.NAMES_ONLY);
   }
 
   public static void toJson(Expression expression, JsonGenerator gen) {
-    ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen, false));
+    ExpressionVisitors.visit(
+        expression, new JsonGeneratorVisitor(gen, SerializationMode.NAMES_ONLY));
   }
 
+  public static void toJson(Expression expression, JsonGenerator gen, SerializationMode mode) {
+    ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen, mode));
+  }
+
+  @Deprecated
   public static void toJson(Expression expression, JsonGenerator gen, boolean includeFieldIds) {
-    ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen, includeFieldIds));
+    toJson(
+        expression,
+        gen,
+        includeFieldIds ? SerializationMode.WITH_FIELD_IDS : SerializationMode.NAMES_ONLY);
   }
 
   private static class JsonGeneratorVisitor
       extends ExpressionVisitors.CustomOrderExpressionVisitor<Void> {
     private final JsonGenerator gen;
-    private final boolean includeFieldIds;
+    private final SerializationMode mode;
 
-    private JsonGeneratorVisitor(JsonGenerator gen, boolean includeFieldIds) {
+    private JsonGeneratorVisitor(JsonGenerator gen, SerializationMode mode) {
       this.gen = gen;
-      this.includeFieldIds = includeFieldIds;
+      this.mode = mode;
     }
 
     /**
@@ -251,7 +275,7 @@ public class ExpressionParser {
         return;
       } else if (term instanceof BoundTransform) {
         BoundTransform<?, ?> transform = (BoundTransform<?, ?>) term;
-        if (includeFieldIds) {
+        if (mode == SerializationMode.WITH_FIELD_IDS) {
           transformWithFieldId(
               transform.transform().toString(), transform.ref().name(), transform.ref().fieldId());
         } else {
@@ -260,7 +284,7 @@ public class ExpressionParser {
         return;
       } else if (term instanceof BoundReference) {
         BoundReference<?> ref = (BoundReference<?>) term;
-        if (includeFieldIds) {
+        if (mode == SerializationMode.WITH_FIELD_IDS) {
           referenceWithFieldId(ref.name(), ref.fieldId());
         } else {
           gen.writeString(ref.name());
@@ -295,8 +319,11 @@ public class ExpressionParser {
 
     private void referenceWithFieldId(String name, int fieldId) throws IOException {
       gen.writeStartObject();
-      gen.writeStringField("type", "ref");
-      gen.writeStringField("name", name);
+      gen.writeStringField("type", REFERENCE);
+      // Only write name if not null (support fieldId-only case)
+      if (name != null) {
+        gen.writeStringField("name", name);
+      }
       gen.writeNumberField("fieldId", fieldId);
       gen.writeEndObject();
     }
@@ -451,12 +478,39 @@ public class ExpressionParser {
       String type = JsonUtil.getString(TYPE, node);
       switch (type) {
         case REFERENCE:
-          return Expressions.ref(JsonUtil.getString(TERM, node));
+          // Reference must have a name (via "name" or "term")
+          // fieldId is optional - if present, creates ResolvedReference, otherwise NamedReference
+          boolean hasTerm = node.has(TERM);
+          boolean hasName = node.has("name");
+          boolean hasFieldId = node.has("fieldId");
+
+          String name =
+              hasName
+                  ? JsonUtil.getString("name", node)
+                  : hasTerm ? JsonUtil.getString(TERM, node) : null;
+
+          if (name == null) {
+            throw new IllegalArgumentException(
+                "REFERENCE must have a name (via 'name' or 'term' field): " + node);
+          }
+
+          if (hasFieldId) {
+            int fieldId = JsonUtil.getInt("fieldId", node);
+            return Expressions.ref(name, fieldId);
+          } else {
+            return Expressions.ref(name);
+          }
         case TRANSFORM:
           UnboundTerm<T> child = term(JsonUtil.get(TERM, node));
-          String transform = JsonUtil.getString(TRANSFORM, node);
-          return (UnboundTerm<T>)
-              Expressions.transform(child.ref().name(), Transforms.fromString(transform));
+          String transformStr = JsonUtil.getString(TRANSFORM, node);
+          NamedReference<?> ref;
+          if (child instanceof NamedReference) {
+            ref = (NamedReference<?>) child;
+          } else {
+            ref = child.ref();
+          }
+          Transform<?, ?> transform = Transforms.fromString(transformStr);
+          return (UnboundTerm<T>) new UnboundTransform(ref, transform);
         default:
           throw new IllegalArgumentException("Cannot parse type as a reference: " + type);
       }

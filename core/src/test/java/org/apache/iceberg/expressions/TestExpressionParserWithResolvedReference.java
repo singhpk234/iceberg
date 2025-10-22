@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.expressions.ExpressionParser.SerializationMode;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
@@ -499,8 +500,9 @@ public class TestExpressionParserWithResolvedReference {
     assertThat(jsonWithoutFieldIds).doesNotContain("fieldId");
 
     // Test serialization with field IDs (new behavior)
-    String jsonWithFieldIds = ExpressionParser.toJson(boundSimple, true, true);
-    assertThat(jsonWithFieldIds).contains("\"type\" : \"ref\"");
+    String jsonWithFieldIds =
+        ExpressionParser.toJson(boundSimple, true, SerializationMode.WITH_FIELD_IDS);
+    assertThat(jsonWithFieldIds).contains("\"type\" : \"reference\"");
     assertThat(jsonWithFieldIds).contains("\"name\" : \"id\"");
     assertThat(jsonWithFieldIds).contains("\"fieldId\" : 100");
 
@@ -511,7 +513,8 @@ public class TestExpressionParserWithResolvedReference {
             Expressions.greaterThan(Expressions.ref("id", 100), 50L));
     Expression boundComplex = Binder.bind(STRUCT_TYPE, complexExpr, true);
 
-    String complexJsonWithFieldIds = ExpressionParser.toJson(boundComplex, true, true);
+    String complexJsonWithFieldIds =
+        ExpressionParser.toJson(boundComplex, true, SerializationMode.WITH_FIELD_IDS);
     assertThat(complexJsonWithFieldIds).contains("\"fieldId\" : 100");
     assertThat(complexJsonWithFieldIds).contains("\"fieldId\" : 101");
     assertThat(complexJsonWithFieldIds).contains("\"name\" : \"id\"");
@@ -539,15 +542,17 @@ public class TestExpressionParserWithResolvedReference {
     assertThat(bucketJsonNoFieldIds).doesNotContain("fieldId");
 
     // Test serialization with field IDs (new behavior)
-    String bucketJsonWithFieldIds = ExpressionParser.toJson(boundBucket, true, true);
+    String bucketJsonWithFieldIds =
+        ExpressionParser.toJson(boundBucket, true, SerializationMode.WITH_FIELD_IDS);
     assertThat(bucketJsonWithFieldIds).contains("\"transform\" : \"bucket[8]\"");
-    assertThat(bucketJsonWithFieldIds).contains("\"type\" : \"ref\"");
+    assertThat(bucketJsonWithFieldIds).contains("\"type\" : \"reference\"");
     assertThat(bucketJsonWithFieldIds).contains("\"name\" : \"id\"");
     assertThat(bucketJsonWithFieldIds).contains("\"fieldId\" : 100");
 
-    String dayJsonWithFieldIds = ExpressionParser.toJson(boundDay, true, true);
+    String dayJsonWithFieldIds =
+        ExpressionParser.toJson(boundDay, true, SerializationMode.WITH_FIELD_IDS);
     assertThat(dayJsonWithFieldIds).contains("\"transform\" : \"day\"");
-    assertThat(dayJsonWithFieldIds).contains("\"type\" : \"ref\"");
+    assertThat(dayJsonWithFieldIds).contains("\"type\" : \"reference\"");
     assertThat(dayJsonWithFieldIds).contains("\"name\" : \"date\"");
     assertThat(dayJsonWithFieldIds).contains("\"fieldId\" : 107");
   }
@@ -568,7 +573,8 @@ public class TestExpressionParserWithResolvedReference {
     Expression bound = Binder.bind(STRUCT_TYPE, complexExpr, true);
 
     // Test serialization with field IDs
-    String jsonWithFieldIds = ExpressionParser.toJson(bound, true, true);
+    String jsonWithFieldIds =
+        ExpressionParser.toJson(bound, true, SerializationMode.WITH_FIELD_IDS);
 
     // Verify all field IDs are present
     assertThat(jsonWithFieldIds).contains("\"fieldId\" : 100"); // id field
@@ -588,7 +594,8 @@ public class TestExpressionParserWithResolvedReference {
     assertThat(jsonWithFieldIds).contains("\"transform\" : \"truncate[4]\"");
 
     // Verify ResolvedReference structure for both transforms and direct references
-    // Count occurrences of "type" : "ref" to ensure all references use ResolvedReference format
+    // Count occurrences of "type" : "reference" to ensure all references use ResolvedReference
+    // format
     long refTypeCount =
         jsonWithFieldIds
             .lines()
@@ -596,7 +603,7 @@ public class TestExpressionParserWithResolvedReference {
                 line -> {
                   int count = 0;
                   int index = 0;
-                  String pattern = "\"type\" : \"ref\"";
+                  String pattern = "\"type\" : \"reference\"";
                   while ((index = line.indexOf(pattern, index)) != -1) {
                     count++;
                     index += pattern.length();
@@ -610,7 +617,7 @@ public class TestExpressionParserWithResolvedReference {
 
   @Test
   public void testBoundExpressionRoundTripWithResolvedReference() {
-    // Test that bound expressions with ResolvedReference can be serialized and maintain information
+    // Test that bound expressions with ResolvedReference can be serialized and parsed back
 
     // Create expressions using both ResolvedTransform and ResolvedReference
     Expression originalExpr =
@@ -622,25 +629,75 @@ public class TestExpressionParserWithResolvedReference {
     Expression bound = Binder.bind(STRUCT_TYPE, originalExpr, true);
 
     // Serialize with field IDs
-    String jsonWithFieldIds = ExpressionParser.toJson(bound, true, true);
+    String jsonWithFieldIds =
+        ExpressionParser.toJson(bound, true, SerializationMode.WITH_FIELD_IDS);
 
     // Verify the JSON structure contains complete ResolvedReference information
-    assertThat(jsonWithFieldIds).contains("\"type\" : \"ref\"");
+    assertThat(jsonWithFieldIds).contains("\"type\" : \"reference\"");
     assertThat(jsonWithFieldIds).contains("\"fieldId\" : 100");
     assertThat(jsonWithFieldIds).contains("\"fieldId\" : 101");
 
-    // Note: The current parser doesn't support parsing ResolvedReference format back to expressions
-    // This test documents the serialization capability for external systems that need field ID
-    // information
+    // Parse back from JSON with field IDs
+    Expression parsed = ExpressionParser.fromJson(jsonWithFieldIds, SCHEMA);
 
-    // Verify that the bound expression maintains the same field IDs after serialization
-    BoundPredicate<?> boundPred = (BoundPredicate<?>) ((And) bound).left();
-    BoundTransform<?, ?> boundTransform = (BoundTransform<?, ?>) boundPred.term();
-    assertThat(boundTransform.ref().fieldId()).isEqualTo(100);
+    // Verify parsed expression uses ResolvedReference
+    assertThat(parsed).isInstanceOf(And.class);
+    And parsedAnd = (And) parsed;
 
-    BoundPredicate<?> boundDataPred = (BoundPredicate<?>) ((And) bound).right();
-    BoundReference<?> boundDataRef = (BoundReference<?>) boundDataPred.term();
-    assertThat(boundDataRef.fieldId()).isEqualTo(101);
+    UnboundPredicate<?> leftPred = (UnboundPredicate<?>) parsedAnd.left();
+    assertThat(leftPred.term()).isInstanceOf(UnboundTransform.class);
+    UnboundTransform<?, ?> leftTransform = (UnboundTransform<?, ?>) leftPred.term();
+    assertThat(leftTransform.ref()).isInstanceOf(ResolvedReference.class);
+    assertThat(((ResolvedReference<?>) leftTransform.ref()).fieldId()).isEqualTo(100);
+
+    UnboundPredicate<?> rightPred = (UnboundPredicate<?>) parsedAnd.right();
+    assertThat(rightPred.term()).isInstanceOf(ResolvedReference.class);
+    ResolvedReference<?> rightRef = (ResolvedReference<?>) rightPred.term();
+    assertThat(rightRef.fieldId()).isEqualTo(101);
+    assertThat(rightRef.name()).isEqualTo("data");
+
+    // Verify that binding the parsed expression produces the same result
+    Expression parsedBound = Binder.bind(STRUCT_TYPE, parsed, true);
+    assertThat(parsedBound.toString()).isEqualTo(bound.toString());
+  }
+
+  @Test
+  public void testResolvedReferenceRoundTripWithFieldIds() {
+    // Test that ResolvedReference expressions with field IDs can be serialized and parsed back
+    Expression original = Expressions.equal(Expressions.ref("id", 100), 42L);
+
+    // Serialize without binding (preserves ResolvedReference)
+    String json = ExpressionParser.toJson(original, true);
+
+    // For unbound expressions, field IDs are not included in JSON by default
+    // We need to manually create JSON with field IDs to test parsing
+    String jsonWithFieldIds =
+        "{\n"
+            + "  \"type\" : \"eq\",\n"
+            + "  \"term\" : {\n"
+            + "    \"type\" : \"reference\",\n"
+            + "    \"term\" : \"id\",\n"
+            + "    \"fieldId\" : 100\n"
+            + "  },\n"
+            + "  \"value\" : 42\n"
+            + "}";
+
+    // Parse the JSON with field IDs
+    Expression parsed = ExpressionParser.fromJson(jsonWithFieldIds, SCHEMA);
+
+    // Verify it creates a ResolvedReference
+    assertThat(parsed).isInstanceOf(UnboundPredicate.class);
+    UnboundPredicate<?> predicate = (UnboundPredicate<?>) parsed;
+    assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
+
+    ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
+    assertThat(resolvedRef.name()).isEqualTo("id");
+    assertThat(resolvedRef.fieldId()).isEqualTo(100);
+
+    // Verify equivalence after binding
+    Expression originalBound = Binder.bind(STRUCT_TYPE, original, true);
+    Expression parsedBound = Binder.bind(STRUCT_TYPE, parsed, true);
+    assertThat(parsedBound.toString()).isEqualTo(originalBound.toString());
   }
 
   @Test
@@ -666,7 +723,7 @@ public class TestExpressionParserWithResolvedReference {
       Expression bound = Binder.bind(STRUCT_TYPE, expr, true);
 
       // Serialize with field IDs
-      String json = ExpressionParser.toJson(bound, true, true);
+      String json = ExpressionParser.toJson(bound, true, SerializationMode.WITH_FIELD_IDS);
 
       // Extract expected field ID from the original ResolvedReference
       UnboundPredicate<?> unboundPred = (UnboundPredicate<?>) expr;
@@ -675,7 +732,7 @@ public class TestExpressionParserWithResolvedReference {
 
       // Verify the field ID is preserved in the JSON
       assertThat(json).contains("\"fieldId\" : " + expectedFieldId);
-      assertThat(json).contains("\"type\" : \"ref\"");
+      assertThat(json).contains("\"type\" : \"reference\"");
     }
   }
 }

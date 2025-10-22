@@ -36,17 +36,13 @@ public class UnboundTransform<S, T> implements UnboundTerm<T>, Term {
     return ref;
   }
 
-  public NamedReference<S> unboundRef() {
-    return ref;
-  }
-
   public Transform<S, T> transform() {
     return transform;
   }
 
   @Override
   public BoundTransform<S, T> bind(Types.StructType struct, boolean caseSensitive) {
-    BoundReference<S> boundRef = (BoundReference<S>) ref.bind(struct, caseSensitive);
+    BoundReference<S> boundRef = ref.bind(struct, caseSensitive);
 
     try {
       ValidationException.check(
@@ -54,11 +50,10 @@ public class UnboundTransform<S, T> implements UnboundTerm<T>, Term {
           "Cannot bind: %s cannot transform %s values from '%s'",
           transform,
           boundRef.type(),
-          ref.toString());
+          ref);
     } catch (IllegalArgumentException e) {
       throw new ValidationException(
-          "Cannot bind: %s cannot transform %s values from '%s'",
-          transform, boundRef.type(), ref.name());
+          "Cannot bind: %s cannot transform %s values from '%s'", transform, boundRef.type(), ref);
     }
 
     return new BoundTransform<>(boundRef, transform);
