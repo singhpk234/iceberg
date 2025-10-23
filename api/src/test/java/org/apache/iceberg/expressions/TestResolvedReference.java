@@ -40,11 +40,12 @@ public class TestResolvedReference {
     ResolvedReference<Integer> ref4 = new ResolvedReference<>("a", 35);
 
     // Equal references
-    assertThat(ref1).isEqualTo(ref2);
-    assertThat(ref1.hashCode()).isEqualTo(ref2.hashCode());
+    assertThat(ref1.fieldId()).isEqualTo(ref2.fieldId());
+    assertThat(ref1.name()).isEqualTo(ref2.name());
 
     // Different names, same fieldId
-    assertThat(ref1).isNotEqualTo(ref3);
+    assertThat(ref1.fieldId()).isEqualTo(ref3.fieldId());
+    assertThat(ref1.name()).isNotEqualTo(ref3.name());
 
     // Same name, different fieldId
     assertThat(ref1).isNotEqualTo(ref4);
@@ -53,13 +54,12 @@ public class TestResolvedReference {
   @Test
   public void testResolvedReferenceBind() {
     ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
-    BoundTerm<Integer> bound = ref.bind(SCHEMA.asStruct(), true);
+    BoundReference<Integer> bound = ref.bind(SCHEMA.asStruct(), true);
 
     assertThat(bound).isInstanceOf(BoundReference.class);
-    BoundReference<Integer> boundRef = (BoundReference<Integer>) bound;
-    assertThat(boundRef.fieldId()).isEqualTo(34);
-    assertThat(boundRef.name()).isEqualTo("a");
-    assertThat(boundRef.type()).isEqualTo(Types.IntegerType.get());
+    assertThat(bound.fieldId()).isEqualTo(34);
+    assertThat(bound.name()).isEqualTo("a");
+    assertThat(bound.type()).isEqualTo(Types.IntegerType.get());
   }
 
   @Test
@@ -67,13 +67,13 @@ public class TestResolvedReference {
     ResolvedReference<Integer> ref = new ResolvedReference<>("A", 34);
 
     // Should work regardless of case sensitivity since we use fieldId
-    BoundTerm<Integer> bound1 = ref.bind(SCHEMA.asStruct(), true);
-    BoundTerm<Integer> bound2 = ref.bind(SCHEMA.asStruct(), false);
+    BoundReference<Integer> bound1 = ref.bind(SCHEMA.asStruct(), true);
+    BoundReference<Integer> bound2 = ref.bind(SCHEMA.asStruct(), false);
 
     assertThat(bound1).isInstanceOf(BoundReference.class);
     assertThat(bound2).isInstanceOf(BoundReference.class);
-    assertThat(((BoundReference<Integer>) bound1).fieldId()).isEqualTo(34);
-    assertThat(((BoundReference<Integer>) bound2).fieldId()).isEqualTo(34);
+    assertThat(bound1.fieldId()).isEqualTo(34);
+    assertThat(bound2.fieldId()).isEqualTo(34);
   }
 
   @Test
@@ -83,7 +83,7 @@ public class TestResolvedReference {
     assertThatThrownBy(() -> ref.bind(SCHEMA.asStruct(), true))
         .isInstanceOf(ValidationException.class)
         .hasMessageContaining(
-            "Cannot find field with id '999' in struct: struct<34: a: optional int, 35: s: required string>, since we are resolving based on ID");
+            "Cannot find field by id 999 in struct: struct<34: a: optional int, 35: s: required string>");
   }
 
   @Test
@@ -98,19 +98,18 @@ public class TestResolvedReference {
   public void testResolvedReferenceToString() {
     ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
 
-    assertThat(ref.toString()).isEqualTo("ref(name=\"a\", fieldId=\"34\")");
+    assertThat(ref.toString()).isEqualTo("ref(name=\"a\", id=\"34\")");
   }
 
   @Test
   public void testResolvedReferenceExpressionIntegration() {
     // Test that ResolvedReference works in expression predicates
-    Expression expr = Expressions.equal(Expressions.ref("a", 34), 5);
+    UnboundPredicate<?> expr = Expressions.equal(Expressions.ref("a", 34), 5);
     assertThat(expr).isInstanceOf(UnboundPredicate.class);
 
-    UnboundPredicate<?> predicate = (UnboundPredicate<?>) expr;
-    assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
+    assertThat(expr.term()).isInstanceOf(ResolvedReference.class);
 
-    ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
+    ResolvedReference<?> resolvedRef = (ResolvedReference<?>) expr.term();
     assertThat(resolvedRef.name()).isEqualTo("a");
     assertThat(resolvedRef.fieldId()).isEqualTo(34);
   }

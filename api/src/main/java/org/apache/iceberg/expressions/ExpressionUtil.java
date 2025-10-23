@@ -232,8 +232,6 @@ public class ExpressionUtil {
           + ")";
     } else if (term instanceof NamedReference) {
       return ((NamedReference<?>) term).name();
-    } else if (term instanceof ResolvedReference) {
-      return ((ResolvedReference<?>) term).name();
     } else if (term instanceof BoundReference) {
       return ((BoundReference<?>) term).name();
     } else {

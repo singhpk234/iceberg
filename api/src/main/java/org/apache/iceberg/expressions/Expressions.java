@@ -103,33 +103,33 @@ public class Expressions {
   }
 
   @SuppressWarnings("unchecked")
-  public static <S, T> UnboundTerm<T> bucket(ResolvedReference<S> resolvedRef, int numBuckets) {
+  public static <S, T> UnboundTerm<T> bucket(NamedReference<S> resolvedRef, int numBuckets) {
     Transform<S, T> transform = (Transform<S, T>) Transforms.bucket(numBuckets);
     return new UnboundTransform<>(resolvedRef, transform);
   }
 
   @SuppressWarnings("unchecked")
-  public static <S, T> UnboundTerm<T> year(ResolvedReference<S> resolvedRef) {
+  public static <S, T> UnboundTerm<T> year(NamedReference<S> resolvedRef) {
     return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.year());
   }
 
   @SuppressWarnings("unchecked")
-  public static <S, T> UnboundTerm<T> month(ResolvedReference<S> resolvedRef) {
+  public static <S, T> UnboundTerm<T> month(NamedReference<S> resolvedRef) {
     return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.month());
   }
 
   @SuppressWarnings("unchecked")
-  public static <S, T> UnboundTerm<T> day(ResolvedReference<S> resolvedRef) {
+  public static <S, T> UnboundTerm<T> day(NamedReference<S> resolvedRef) {
     return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.day());
   }
 
   @SuppressWarnings("unchecked")
-  public static <S, T> UnboundTerm<T> hour(ResolvedReference<S> resolvedRef) {
+  public static <S, T> UnboundTerm<T> hour(NamedReference<S> resolvedRef) {
     return new UnboundTransform<>(resolvedRef, (Transform<S, T>) Transforms.hour());
   }
 
   @SuppressWarnings("unchecked")
-  public static <S, T> UnboundTerm<T> truncate(ResolvedReference<S> resolvedRef, int width) {
+  public static <S, T> UnboundTerm<T> truncate(NamedReference<S> resolvedRef, int width) {
     Transform<S, T> transform = (Transform<S, T>) Transforms.truncate(width);
     return new UnboundTransform<>(resolvedRef, transform);
   }
@@ -348,7 +348,7 @@ public class Expressions {
    * @param <T> the Java type of this reference
    * @return a named reference
    */
-  public static <T> ResolvedReference<T> ref(String name, int fieldId) {
+  static <T> ResolvedReference<T> ref(String name, int fieldId) {
     return new ResolvedReference<>(name, fieldId);
   }
 

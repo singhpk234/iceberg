@@ -22,6 +22,13 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.types.Types;
 
+/**
+ * A reference to a field by ID rather than name. This extends NamedReference because it is a more
+ * specific in that the name has already been resolved to a field ID. Because the name has been
+ * resolved, the name is informational.
+ *
+ * @param <T>
+ */
 public class ResolvedReference<T> extends NamedReference<T> {
   private final int fieldId;
 
@@ -39,40 +46,13 @@ public class ResolvedReference<T> extends NamedReference<T> {
     Schema schema = struct.asSchema();
     Types.NestedField field = schema.findField(fieldId);
     ValidationException.check(
-        field != null,
-        "Cannot find field with id '%s' in struct: %s, since we are resolving based on ID",
-        fieldId,
-        schema.asStruct());
+        field != null, "Cannot find field by id %s in struct: %s", fieldId, schema.asStruct());
 
     return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name());
   }
 
   @Override
-  public NamedReference<T> ref() {
-    return new NamedReference<>(name());
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-
-    if (o == null || getClass() != o.getClass()) {
-      return false;
-    }
-
-    ResolvedReference<?> that = (ResolvedReference<?>) o;
-    return fieldId == that.fieldId && name().equals(that.name());
-  }
-
-  @Override
-  public int hashCode() {
-    return 31 * fieldId + name().hashCode();
-  }
-
-  @Override
   public String toString() {
-    return String.format("ref(name=\"%s\", fieldId=\"%s\")", name(), fieldId);
+    return String.format("ref(name=\"%s\", id=\"%s\")", name(), fieldId);
   }
 }

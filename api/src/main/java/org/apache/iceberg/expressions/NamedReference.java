@@ -38,16 +38,16 @@ public class NamedReference<T> implements UnboundTerm<T>, Reference<T> {
 
   @Override
   public BoundReference<T> bind(Types.StructType struct, boolean caseSensitive) {
-    ValidationException.check(name() != null, "Name cannot be null");
+    ValidationException.check(name != null, "Name cannot be null");
 
     Schema schema = struct.asSchema();
     Types.NestedField field =
-        caseSensitive ? schema.findField(name()) : schema.caseInsensitiveFindField(name());
+        caseSensitive ? schema.findField(name) : schema.caseInsensitiveFindField(name);
 
     ValidationException.check(
-        field != null, "Cannot find field '%s' in struct: %s", name(), schema.asStruct());
+        field != null, "Cannot find field '%s' in struct: %s", name, schema.asStruct());
 
-    return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name());
+    return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name);
   }
 
   @Override
@@ -57,6 +57,6 @@ public class NamedReference<T> implements UnboundTerm<T>, Reference<T> {
 
   @Override
   public String toString() {
-    return String.format("ref(name=\"%s\")", name());
+    return String.format("ref(name=\"%s\")", name);
   }
 }
