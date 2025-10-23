@@ -2292,14 +2292,16 @@ components:
     Reference:
       oneOf:
         - $ref: '#/components/schemas/NamedReference'
-        - $ref: '#/components/schemas/ResolvedReference'
+        - $ref: '#/components/schemas/IDReference'
 
     NamedReference:
+      description: Reference to a column by its name
       type: string
       example:
         - "column-name"
 
-    ResolvedReference:
+    IDReference:
+      description: Reference to a column by its field ID
       allOf:
         - $ref: '#/components/schemas/NamedReference'
         - type: object

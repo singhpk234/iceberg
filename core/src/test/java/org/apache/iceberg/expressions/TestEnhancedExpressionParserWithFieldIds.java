@@ -51,7 +51,7 @@ public class TestEnhancedExpressionParserWithFieldIds {
 
   // Enhanced JSON format constants for field ID support
   private static final String FIELD_ID = "field-id";
-  private static final String REFERENCE_WITH_ID = "resolved-reference";
+  private static final String REFERENCE_WITH_ID = "id-reference";
 
   @Test
   public void testEnhancedJsonFormatWithFieldIds() {
@@ -66,7 +66,7 @@ public class TestEnhancedExpressionParserWithFieldIds {
         "{\n"
             + "  \"type\" : \"eq\",\n"
             + "  \"term\" : {\n"
-            + "    \"type\" : \"resolved-reference\",\n"
+            + "    \"type\" : \"id-reference\",\n"
             + "    \"name\" : \"data\",\n"
             + "    \"field-id\" : 101\n"
             + "  },\n"
@@ -83,7 +83,7 @@ public class TestEnhancedExpressionParserWithFieldIds {
         "{\n"
             + "  \"type\" : \"eq\",\n"
             + "  \"term\" : {\n"
-            + "    \"type\" : \"resolved-reference\",\n"
+            + "    \"type\" : \"id-reference\",\n"
             + "    \"name\" : \"data\",\n"
             + "    \"field-id\" : 101\n"
             + "  },\n"
@@ -95,11 +95,11 @@ public class TestEnhancedExpressionParserWithFieldIds {
 
     assertThat(parsed).isInstanceOf(UnboundPredicate.class);
     UnboundPredicate<?> predicate = (UnboundPredicate<?>) parsed;
-    assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
+    assertThat(predicate.term()).isInstanceOf(IDReference.class);
 
-    ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
+    IDReference<?> resolvedRef = (IDReference<?>) predicate.term();
     assertThat(resolvedRef.name()).isEqualTo("data");
-    assertThat(resolvedRef.fieldId()).isEqualTo(101);
+    assertThat(resolvedRef.id()).isEqualTo(101);
   }
 
   @Test
@@ -133,7 +133,7 @@ public class TestEnhancedExpressionParserWithFieldIds {
     String enhancedJson = generateEnhancedJson(mixedExpr);
 
     // Should contain both reference types in JSON
-    assertThat(enhancedJson).contains("\"resolved-reference\"");
+    assertThat(enhancedJson).contains("\"id-reference\"");
     assertThat(enhancedJson).contains("\"field-id\" : 101");
     assertThat(enhancedJson).contains("\"active\"");
 
@@ -145,7 +145,7 @@ public class TestEnhancedExpressionParserWithFieldIds {
 
     // Left side should be ResolvedReference
     UnboundPredicate<?> leftPred = (UnboundPredicate<?>) andExpr.left();
-    assertThat(leftPred.term()).isInstanceOf(ResolvedReference.class);
+    assertThat(leftPred.term()).isInstanceOf(IDReference.class);
 
     // Right side should be NamedReference
     UnboundPredicate<?> rightPred = (UnboundPredicate<?>) andExpr.right();
@@ -172,15 +172,15 @@ public class TestEnhancedExpressionParserWithFieldIds {
 
     // Check left predicate (id > 50)
     UnboundPredicate<?> leftPred = (UnboundPredicate<?>) andExpr.left();
-    ResolvedReference<?> leftRef = (ResolvedReference<?>) leftPred.term();
+    IDReference<?> leftRef = (IDReference<?>) leftPred.term();
     assertThat(leftRef.name()).isEqualTo("id");
-    assertThat(leftRef.fieldId()).isEqualTo(100);
+    assertThat(leftRef.id()).isEqualTo(100);
 
     // Check right predicate (data = "test")
     UnboundPredicate<?> rightPred = (UnboundPredicate<?>) andExpr.right();
-    ResolvedReference<?> rightRef = (ResolvedReference<?>) rightPred.term();
+    IDReference<?> rightRef = (IDReference<?>) rightPred.term();
     assertThat(rightRef.name()).isEqualTo("data");
-    assertThat(rightRef.fieldId()).isEqualTo(101);
+    assertThat(rightRef.id()).isEqualTo(101);
   }
 
   // Helper methods to demonstrate enhanced JSON generation and parsing
@@ -340,12 +340,12 @@ public class TestEnhancedExpressionParserWithFieldIds {
     }
 
     private void writeTerm(UnboundTerm<?> term) throws IOException {
-      if (term instanceof ResolvedReference) {
-        ResolvedReference<?> resolvedRef = (ResolvedReference<?>) term;
+      if (term instanceof IDReference) {
+        IDReference<?> resolvedRef = (IDReference<?>) term;
         gen.writeStartObject();
         gen.writeStringField("type", REFERENCE_WITH_ID);
         gen.writeStringField("name", resolvedRef.name());
-        gen.writeNumberField(FIELD_ID, resolvedRef.fieldId());
+        gen.writeNumberField(FIELD_ID, resolvedRef.id());
         gen.writeEndObject();
       } else if (term instanceof NamedReference) {
         gen.writeString(((NamedReference<?>) term).name());

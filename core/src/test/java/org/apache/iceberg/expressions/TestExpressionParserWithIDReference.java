@@ -29,7 +29,7 @@ import org.apache.iceberg.expressions.ExpressionParser.SerializationMode;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
-public class TestExpressionParserWithResolvedReference {
+public class TestExpressionParserWithIDReference {
 
   private static final Types.StructType STRUCT_TYPE =
       Types.StructType.of(
@@ -72,7 +72,7 @@ public class TestExpressionParserWithResolvedReference {
       // Verify the expression uses ResolvedReference
       assertThat(expr).isInstanceOf(UnboundPredicate.class);
       UnboundPredicate<?> predicate = (UnboundPredicate<?>) expr;
-      assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
+      assertThat(predicate.term()).isInstanceOf(IDReference.class);
 
       // Test JSON serialization
       String json = ExpressionParser.toJson(expr, true);
@@ -80,7 +80,7 @@ public class TestExpressionParserWithResolvedReference {
       assertThat(json).contains("\"type\"");
 
       // Test that JSON contains the field name (not field ID since parser doesn't support it yet)
-      ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
+      IDReference<?> resolvedRef = (IDReference<?>) predicate.term();
       assertThat(json).contains(resolvedRef.name());
     }
   }
@@ -647,13 +647,13 @@ public class TestExpressionParserWithResolvedReference {
     UnboundPredicate<?> leftPred = (UnboundPredicate<?>) parsedAnd.left();
     assertThat(leftPred.term()).isInstanceOf(UnboundTransform.class);
     UnboundTransform<?, ?> leftTransform = (UnboundTransform<?, ?>) leftPred.term();
-    assertThat(leftTransform.ref()).isInstanceOf(ResolvedReference.class);
-    assertThat(((ResolvedReference<?>) leftTransform.ref()).fieldId()).isEqualTo(100);
+    assertThat(leftTransform.ref()).isInstanceOf(IDReference.class);
+    assertThat(((IDReference<?>) leftTransform.ref()).id()).isEqualTo(100);
 
     UnboundPredicate<?> rightPred = (UnboundPredicate<?>) parsedAnd.right();
-    assertThat(rightPred.term()).isInstanceOf(ResolvedReference.class);
-    ResolvedReference<?> rightRef = (ResolvedReference<?>) rightPred.term();
-    assertThat(rightRef.fieldId()).isEqualTo(101);
+    assertThat(rightPred.term()).isInstanceOf(IDReference.class);
+    IDReference<?> rightRef = (IDReference<?>) rightPred.term();
+    assertThat(rightRef.id()).isEqualTo(101);
     assertThat(rightRef.name()).isEqualTo("data");
 
     // Verify that binding the parsed expression produces the same result
@@ -688,11 +688,11 @@ public class TestExpressionParserWithResolvedReference {
     // Verify it creates a ResolvedReference
     assertThat(parsed).isInstanceOf(UnboundPredicate.class);
     UnboundPredicate<?> predicate = (UnboundPredicate<?>) parsed;
-    assertThat(predicate.term()).isInstanceOf(ResolvedReference.class);
+    assertThat(predicate.term()).isInstanceOf(IDReference.class);
 
-    ResolvedReference<?> resolvedRef = (ResolvedReference<?>) predicate.term();
+    IDReference<?> resolvedRef = (IDReference<?>) predicate.term();
     assertThat(resolvedRef.name()).isEqualTo("id");
-    assertThat(resolvedRef.fieldId()).isEqualTo(100);
+    assertThat(resolvedRef.id()).isEqualTo(100);
 
     // Verify equivalence after binding
     Expression originalBound = Binder.bind(STRUCT_TYPE, original, true);
@@ -701,7 +701,7 @@ public class TestExpressionParserWithResolvedReference {
   }
 
   @Test
-  public void testBoundExpressionFieldIdPreservationAcrossAllTypes() {
+  public void testBoundExpressionIdPreservationAcrossAllTypes() {
     // Test that all data types preserve field IDs correctly in bound expression serialization
 
     // Create expressions for fields that support meaningful comparisons
@@ -727,8 +727,8 @@ public class TestExpressionParserWithResolvedReference {
 
       // Extract expected field ID from the original ResolvedReference
       UnboundPredicate<?> unboundPred = (UnboundPredicate<?>) expr;
-      ResolvedReference<?> resolvedRef = (ResolvedReference<?>) unboundPred.term();
-      int expectedFieldId = resolvedRef.fieldId();
+      IDReference<?> resolvedRef = (IDReference<?>) unboundPred.term();
+      int expectedFieldId = resolvedRef.id();
 
       // Verify the field ID is preserved in the JSON
       assertThat(json).contains("\"fieldId\" : " + expectedFieldId);

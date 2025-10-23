@@ -206,15 +206,15 @@ public class TestExpressionSerialization {
       NamedReference rref = (NamedReference) right;
 
       return lref.name().equals(rref.name());
-    } else if (left instanceof ResolvedReference) {
-      if (!(right instanceof ResolvedReference)) {
+    } else if (left instanceof IDReference) {
+      if (!(right instanceof IDReference)) {
         return false;
       }
 
-      ResolvedReference lref = (ResolvedReference) left;
-      ResolvedReference rref = (ResolvedReference) right;
+      IDReference lref = (IDReference) left;
+      IDReference rref = (IDReference) right;
 
-      return lref.fieldId() == rref.fieldId() && lref.name().equals(rref.name());
+      return lref.id() == rref.id() && lref.name().equals(rref.name());
     } else if (left instanceof BoundReference) {
       if (!(right instanceof BoundReference)) {
         return false;

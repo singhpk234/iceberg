@@ -348,8 +348,8 @@ public class Expressions {
    * @param <T> the Java type of this reference
    * @return a named reference
    */
-  static <T> ResolvedReference<T> ref(String name, int fieldId) {
-    return new ResolvedReference<>(name, fieldId);
+  static <T> IDReference<T> ref(String name, int fieldId) {
+    return new IDReference<>(name, fieldId);
   }
 
   /**

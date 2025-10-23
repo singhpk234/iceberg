@@ -26,25 +26,25 @@ import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
-public class TestResolvedReference {
+public class TestIDReference {
   private static final Schema SCHEMA =
       new Schema(
           Types.NestedField.optional(34, "a", Types.IntegerType.get()),
           Types.NestedField.required(35, "s", Types.StringType.get()));
 
   @Test
-  public void testResolvedReferenceEquality() {
-    ResolvedReference<Integer> ref1 = new ResolvedReference<>("a", 34);
-    ResolvedReference<Integer> ref2 = new ResolvedReference<>("a", 34);
-    ResolvedReference<Integer> ref3 = new ResolvedReference<>("b", 34);
-    ResolvedReference<Integer> ref4 = new ResolvedReference<>("a", 35);
+  public void testIDReferenceEquality() {
+    IDReference<Integer> ref1 = new IDReference<>("a", 34);
+    IDReference<Integer> ref2 = new IDReference<>("a", 34);
+    IDReference<Integer> ref3 = new IDReference<>("b", 34);
+    IDReference<Integer> ref4 = new IDReference<>("a", 35);
 
     // Equal references
-    assertThat(ref1.fieldId()).isEqualTo(ref2.fieldId());
+    assertThat(ref1.id()).isEqualTo(ref2.id());
     assertThat(ref1.name()).isEqualTo(ref2.name());
 
     // Different names, same fieldId
-    assertThat(ref1.fieldId()).isEqualTo(ref3.fieldId());
+    assertThat(ref1.id()).isEqualTo(ref3.id());
     assertThat(ref1.name()).isNotEqualTo(ref3.name());
 
     // Same name, different fieldId
@@ -52,8 +52,8 @@ public class TestResolvedReference {
   }
 
   @Test
-  public void testResolvedReferenceBind() {
-    ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
+  public void testIDReferenceBind() {
+    IDReference<Integer> ref = new IDReference<>("a", 34);
     BoundReference<Integer> bound = ref.bind(SCHEMA.asStruct(), true);
 
     assertThat(bound).isInstanceOf(BoundReference.class);
@@ -63,8 +63,8 @@ public class TestResolvedReference {
   }
 
   @Test
-  public void testResolvedReferenceBindIgnoresCaseSensitivity() {
-    ResolvedReference<Integer> ref = new ResolvedReference<>("A", 34);
+  public void testIDReferenceBindIgnoresCaseSensitivity() {
+    IDReference<Integer> ref = new IDReference<>("A", 34);
 
     // Should work regardless of case sensitivity since we use fieldId
     BoundReference<Integer> bound1 = ref.bind(SCHEMA.asStruct(), true);
@@ -77,8 +77,8 @@ public class TestResolvedReference {
   }
 
   @Test
-  public void testResolvedReferenceBindWithInvalidFieldId() {
-    ResolvedReference<Integer> ref = new ResolvedReference<>("invalid", 999);
+  public void testIDReferenceBindWithInvalidId() {
+    IDReference<Integer> ref = new IDReference<>("invalid", 999);
 
     assertThatThrownBy(() -> ref.bind(SCHEMA.asStruct(), true))
         .isInstanceOf(ValidationException.class)
@@ -87,8 +87,8 @@ public class TestResolvedReference {
   }
 
   @Test
-  public void testResolvedReferenceRef() {
-    ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
+  public void testIDReferenceRef() {
+    IDReference<Integer> ref = new IDReference<>("a", 34);
     NamedReference<?> namedRef = ref.ref();
 
     assertThat(namedRef.name()).isEqualTo("a");
@@ -96,26 +96,26 @@ public class TestResolvedReference {
 
   @Test
   public void testResolvedReferenceToString() {
-    ResolvedReference<Integer> ref = new ResolvedReference<>("a", 34);
+    IDReference<Integer> ref = new IDReference<>("a", 34);
 
     assertThat(ref.toString()).isEqualTo("ref(name=\"a\", id=\"34\")");
   }
 
   @Test
-  public void testResolvedReferenceExpressionIntegration() {
-    // Test that ResolvedReference works in expression predicates
+  public void testIDReferenceExpressionIntegration() {
+    // Test that IDReference works in expression predicates
     UnboundPredicate<?> expr = Expressions.equal(Expressions.ref("a", 34), 5);
     assertThat(expr).isInstanceOf(UnboundPredicate.class);
 
-    assertThat(expr.term()).isInstanceOf(ResolvedReference.class);
+    assertThat(expr.term()).isInstanceOf(IDReference.class);
 
-    ResolvedReference<?> resolvedRef = (ResolvedReference<?>) expr.term();
+    IDReference<?> resolvedRef = (IDReference<?>) expr.term();
     assertThat(resolvedRef.name()).isEqualTo("a");
-    assertThat(resolvedRef.fieldId()).isEqualTo(34);
+    assertThat(resolvedRef.id()).isEqualTo(34);
   }
 
   @Test
-  public void testResolvedReferenceUnbind() {
+  public void testIDReferenceUnbind() {
     // Test that unbinding a bound reference returns a NamedReference for compatibility
     Expression expr = Expressions.equal(Expressions.ref("a", 34), 5);
     Expression boundExpr = Binder.bind(SCHEMA.asStruct(), expr, true);

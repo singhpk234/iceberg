@@ -26,33 +26,31 @@ import org.apache.iceberg.types.Types;
  * A reference to a field by ID rather than name. This extends NamedReference because it is a more
  * specific in that the name has already been resolved to a field ID. Because the name has been
  * resolved, the name is informational.
- *
- * @param <T>
  */
-public class ResolvedReference<T> extends NamedReference<T> {
-  private final int fieldId;
+public class IDReference<T> extends NamedReference<T> {
+  private final int id;
 
-  public ResolvedReference(String name, int fieldId) {
+  public IDReference(String name, int id) {
     super(name);
-    this.fieldId = fieldId;
+    this.id = id;
   }
 
-  public int fieldId() {
-    return fieldId;
+  public int id() {
+    return id;
   }
 
   @Override
   public BoundReference<T> bind(Types.StructType struct, boolean caseSensitive) {
     Schema schema = struct.asSchema();
-    Types.NestedField field = schema.findField(fieldId);
+    Types.NestedField field = schema.findField(id);
     ValidationException.check(
-        field != null, "Cannot find field by id %s in struct: %s", fieldId, schema.asStruct());
+        field != null, "Cannot find field by id %s in struct: %s", id, schema.asStruct());
 
     return new BoundReference<>(field, schema.accessorForField(field.fieldId()), name());
   }
 
   @Override
   public String toString() {
-    return String.format("ref(name=\"%s\", id=\"%s\")", name(), fieldId);
+    return String.format("ref(name=\"%s\", id=\"%s\")", name(), id);
   }
 }
