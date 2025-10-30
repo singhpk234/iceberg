@@ -45,6 +45,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.http.HttpHeaders;
 import org.apache.iceberg.BaseTable;
@@ -62,6 +63,7 @@ import org.apache.iceberg.RESTTable;
 import org.apache.iceberg.RESTTableScan;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
@@ -180,6 +182,26 @@ public class TestRESTCatalog extends CatalogTests<RESTCatalog> {
                 }
                 T responseAfterSerialization = roundTripSerialize(response, "response");
                 return responseAfterSerialization;
+              }
+
+              @Override
+              protected PlanningBehavior planningBehavior() {
+                return new PlanningBehavior() {
+                  @Override
+                  public int numberFileScanTasksPerPlanTask() {
+                    return 2;
+                  }
+
+                  @Override
+                  public boolean shouldPlanTableScanAsync(TableScan scan) {
+                    String numDataFiles =
+                        scan.table()
+                            .snapshot(scan.snapshot().snapshotId())
+                            .summary()
+                            .get(SnapshotSummary.TOTAL_DATA_FILES_PROP);
+                    return Long.parseLong(numDataFiles) >= 3;
+                  }
+                };
               }
             });
 
@@ -2761,14 +2783,16 @@ public class TestRESTCatalog extends CatalogTests<RESTCatalog> {
   public void testPlanTableScanAndFetchPlanningResultWithSubmittedStatusAndFileScanTask()
       throws IOException {
     Table table = createRESTTableAndInsertData(TABLE_SUBMITTED_WITH_FILE_SCAN_TASK);
+    table.newAppend().appendFile(FILE_B).appendFile(FILE_C).commit();
     assertBoundFileScanTasks(table, SPEC);
 
     // Verify actual data file is returned after async polling with correct count
     CloseableIterable<FileScanTask> iterable = table.newScan().planFiles();
     List<FileScanTask> tasks = Lists.newArrayList(iterable);
 
-    assertThat(tasks).hasSize(1); // 1 data file: FILE_A
-    assertThat(tasks.get(0).file().path()).isEqualTo(FILE_A.path());
+    assertThat(tasks).hasSize(3); // 3 data files: FILE_A, FILE_B, FILE_C
+    assertThat(tasks.stream().map(task -> task.file().location()).collect(Collectors.toList()))
+        .containsOnly(FILE_A.location(), FILE_B.location(), FILE_C.location());
     assertThat(tasks.get(0).deletes()).isEmpty(); // 0 delete files
   }
 
