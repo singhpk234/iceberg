@@ -2306,9 +2306,13 @@ components:
         - $ref: '#/components/schemas/NamedReference'
         - type: object
           required:
-            - field-id
+            - type
+            - source-id
           properties:
-            field-id:
+            type:
+              type: string
+              const: "reference"
+            source-id:
               type: integer
 
     TransformTerm:

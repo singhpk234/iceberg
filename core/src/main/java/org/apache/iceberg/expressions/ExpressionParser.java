@@ -50,9 +50,10 @@ public class ExpressionParser {
   private static final String RIGHT = "right";
   private static final String CHILD = "child";
   private static final String REFERENCE = "reference";
+  private static final String SOURCE_ID = "source-id";
   private static final String LITERAL = "literal";
 
-  public enum SerializationMode {
+  private enum SerializationMode {
     NAMES_ONLY,
     WITH_FIELD_IDS
   }
@@ -68,35 +69,27 @@ public class ExpressionParser {
     return JsonUtil.generate(gen -> toJson(expression, gen), pretty);
   }
 
-  public static String toJson(Expression expression, boolean pretty, SerializationMode mode) {
-    Preconditions.checkArgument(expression != null, "Invalid expression: null");
-    return JsonUtil.generate(gen -> toJson(expression, gen, mode), pretty);
+  public static String toResolvedJson(Expression expression) {
+    return toResolvedJson(expression, false);
   }
 
-  @Deprecated
-  public static String toJson(Expression expression, boolean pretty, boolean includeFieldIds) {
+  public static String toResolvedJson(Expression expression, boolean pretty) {
     Preconditions.checkArgument(expression != null, "Invalid expression: null");
-    return toJson(
-        expression,
-        pretty,
-        includeFieldIds ? SerializationMode.WITH_FIELD_IDS : SerializationMode.NAMES_ONLY);
+    return JsonUtil.generate(
+        gen -> toJsonInternal(expression, gen, SerializationMode.WITH_FIELD_IDS), pretty);
   }
 
   public static void toJson(Expression expression, JsonGenerator gen) {
-    ExpressionVisitors.visit(
-        expression, new JsonGeneratorVisitor(gen, SerializationMode.NAMES_ONLY));
+    toJsonInternal(expression, gen, SerializationMode.NAMES_ONLY);
   }
 
-  public static void toJson(Expression expression, JsonGenerator gen, SerializationMode mode) {
+  public static void toResolvedJson(Expression expression, JsonGenerator gen) {
+    toJsonInternal(expression, gen, SerializationMode.WITH_FIELD_IDS);
+  }
+
+  private static void toJsonInternal(
+      Expression expression, JsonGenerator gen, SerializationMode mode) {
     ExpressionVisitors.visit(expression, new JsonGeneratorVisitor(gen, mode));
-  }
-
-  @Deprecated
-  public static void toJson(Expression expression, JsonGenerator gen, boolean includeFieldIds) {
-    toJson(
-        expression,
-        gen,
-        includeFieldIds ? SerializationMode.WITH_FIELD_IDS : SerializationMode.NAMES_ONLY);
   }
 
   private static class JsonGeneratorVisitor
@@ -271,24 +264,28 @@ public class ExpressionParser {
     private void term(Term term) throws IOException {
       if (term instanceof UnboundTransform) {
         UnboundTransform<?, ?> transform = (UnboundTransform<?, ?>) term;
-        transform(transform.transform().toString(), transform.ref().name());
+        NamedReference<?> ref = transform.ref();
+        Integer fieldId = null;
+        if (mode == SerializationMode.WITH_FIELD_IDS && ref instanceof IDReference) {
+          fieldId = ((IDReference<?>) ref).id();
+        }
+        transform(transform.transform().toString(), ref.name(), fieldId);
         return;
       } else if (term instanceof BoundTransform) {
         BoundTransform<?, ?> transform = (BoundTransform<?, ?>) term;
-        if (mode == SerializationMode.WITH_FIELD_IDS) {
-          transformWithFieldId(
-              transform.transform().toString(), transform.ref().name(), transform.ref().fieldId());
-        } else {
-          transform(transform.transform().toString(), transform.ref().name());
-        }
+        Integer fieldId =
+            mode == SerializationMode.WITH_FIELD_IDS ? transform.ref().fieldId() : null;
+        transform(transform.transform().toString(), transform.ref().name(), fieldId);
         return;
       } else if (term instanceof BoundReference) {
         BoundReference<?> ref = (BoundReference<?>) term;
-        if (mode == SerializationMode.WITH_FIELD_IDS) {
-          referenceWithFieldId(ref.name(), ref.fieldId());
-        } else {
-          gen.writeString(ref.name());
-        }
+        Integer fieldId = mode == SerializationMode.WITH_FIELD_IDS ? ref.fieldId() : null;
+        reference(ref.name(), fieldId);
+        return;
+      } else if (term instanceof IDReference) {
+        IDReference<?> ref = (IDReference<?>) term;
+        Integer fieldId = mode == SerializationMode.WITH_FIELD_IDS ? ref.id() : null;
+        reference(ref.name(), fieldId);
         return;
       } else if (term instanceof Reference) {
         gen.writeString(((Reference<?>) term).name());
@@ -298,34 +295,31 @@ public class ExpressionParser {
       throw new UnsupportedOperationException("Cannot write unsupported term: " + term);
     }
 
-    private void transform(String transform, String name) throws IOException {
+    private void transform(String transform, String name, Integer fieldId) throws IOException {
       gen.writeStartObject();
       gen.writeStringField(TYPE, TRANSFORM);
       gen.writeStringField(TRANSFORM, transform);
-      gen.writeStringField(TERM, name);
-      gen.writeEndObject();
-    }
-
-    private void transformWithFieldId(String transform, String name, int fieldId)
-        throws IOException {
-      gen.writeStartObject();
-      gen.writeStringField(TYPE, TRANSFORM);
-      gen.writeStringField(TRANSFORM, transform);
-      // Write term as a ResolvedReference object
       gen.writeFieldName(TERM);
-      referenceWithFieldId(name, fieldId);
+      if (fieldId != null) {
+        reference(name, fieldId);
+      } else {
+        gen.writeString(name);
+      }
       gen.writeEndObject();
     }
 
-    private void referenceWithFieldId(String name, int fieldId) throws IOException {
-      gen.writeStartObject();
-      gen.writeStringField("type", REFERENCE);
-      // Only write name if not null (support fieldId-only case)
-      if (name != null) {
-        gen.writeStringField("name", name);
+    private void reference(String name, Integer fieldId) throws IOException {
+      if (fieldId != null) {
+        gen.writeStartObject();
+        gen.writeStringField(TYPE, REFERENCE);
+        if (name != null) {
+          gen.writeStringField(TERM, name);
+        }
+        gen.writeNumberField(SOURCE_ID, fieldId);
+        gen.writeEndObject();
+      } else {
+        gen.writeString(name);
       }
-      gen.writeNumberField("fieldId", fieldId);
-      gen.writeEndObject();
     }
   }
 
@@ -478,24 +472,12 @@ public class ExpressionParser {
       String type = JsonUtil.getString(TYPE, node);
       switch (type) {
         case REFERENCE:
-          // Reference must have a name (via "name" or "term")
-          // fieldId is optional - if present, creates ResolvedReference, otherwise NamedReference
-          boolean hasTerm = node.has(TERM);
-          boolean hasName = node.has("name");
-          boolean hasFieldId = node.has("fieldId");
+          // source-id is optional - if present, creates IDReference, otherwise NamedReference
+          String name = JsonUtil.getString(TERM, node);
+          boolean hasSourceId = node.has(SOURCE_ID);
 
-          String name =
-              hasName
-                  ? JsonUtil.getString("name", node)
-                  : hasTerm ? JsonUtil.getString(TERM, node) : null;
-
-          if (name == null) {
-            throw new IllegalArgumentException(
-                "REFERENCE must have a name (via 'name' or 'term' field): " + node);
-          }
-
-          if (hasFieldId) {
-            int fieldId = JsonUtil.getInt("fieldId", node);
+          if (hasSourceId) {
+            int fieldId = JsonUtil.getInt(SOURCE_ID, node);
             return Expressions.ref(name, fieldId);
           } else {
             return Expressions.ref(name);
