@@ -21,7 +21,6 @@ package org.apache.iceberg.rest;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -409,7 +408,7 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
         .withAuthSession(contextualSession)
         .get(
             paths.table(identifier),
-            referencedByToQueryParam(mode.params(), viewContext),
+            referencedByToQueryParam(snapshotModeToParam(mode), viewContext),
             LoadTableResponse.class,
             Map.of(),
             ErrorHandlers.tableErrorHandler());
@@ -424,21 +423,40 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
     Map<String, String> queryParams = Maps.newHashMap(params);
     Object viewIdentifierObj = context.get(ContextAwareTableCatalog.VIEW_IDENTIFIER_KEY);
 
-    if (!(viewIdentifierObj instanceof String)) {
-      throw new IllegalStateException("Invalid view identifier in context: " + viewIdentifierObj);
+    if (!(viewIdentifierObj instanceof List)) {
+      throw new IllegalStateException(
+          "Invalid view identifier in context, expected List<TableIdentifier>: "
+              + viewIdentifierObj);
     }
 
-    String[] parts = (viewIdentifierObj.toString()).split("\\.");
-    if (parts.length < 2) {
-      throw new IllegalStateException("Invalid view identifier in context: " + viewIdentifierObj);
+    @SuppressWarnings("unchecked")
+    List<TableIdentifier> viewIdentifiers = (List<TableIdentifier>) viewIdentifierObj;
+
+    if (viewIdentifiers.isEmpty()) {
+      return params;
     }
 
-    String[] namespaceParts = Arrays.copyOf(parts, parts.length - 1);
-    String viewName = parts[parts.length - 1];
+    // Format per REST API spec:
+    // - Namespace parts joined by namespace separator (0x1F, URL-encoded as %1F)
+    // - Namespace and view name separated by dot (.)
+    // - Multiple views separated by comma (,)
+    // - Commas in view names must be percent-encoded as %2C
+    List<String> formattedViews = Lists.newArrayListWithCapacity(viewIdentifiers.size());
+    for (TableIdentifier viewId : viewIdentifiers) {
+      // Encode namespace using RESTUtil which handles the namespace separator
+      String encodedNamespace = RESTUtil.encodeNamespace(viewId.namespace());
 
-    String encodedNamespace = RESTUtil.encodeNamespace(Namespace.of(namespaceParts));
-    String encodedViewName = RESTUtil.encodeString("." + viewName);
-    queryParams.put("referenced-by", encodedNamespace + encodedViewName);
+      // Encode view name - commas must be encoded as %2C
+      String encodedViewName = RESTUtil.encodeString(viewId.name());
+
+      // Combine: encodedNamespace + "." + encodedViewName
+      // Note: RESTUtil.encodeString already encodes the dot if present in the view name,
+      // but we add an unencoded dot as the separator
+      formattedViews.add(encodedNamespace + "." + encodedViewName);
+    }
+
+    // Join multiple views with comma
+    queryParams.put("referenced-by", String.join(",", formattedViews));
 
     return queryParams;
   }

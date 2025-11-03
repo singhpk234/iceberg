@@ -28,7 +28,18 @@ import org.apache.iceberg.exceptions.NoSuchTableException;
  */
 public interface ContextAwareTableCatalog {
 
-  /** Context key for the view identifier that references a table */
+  /**
+   * Context key for the view identifier(s) that reference the table being loaded.
+   *
+   * <p>The value should be a List&lt;TableIdentifier&gt; representing the view(s) that reference
+   * the table. For nested views (a view referencing another view which references the table), the
+   * list should be ordered from outermost view to the view that directly references the table.
+   *
+   * <p>This structured format keeps namespace parts and view names separate throughout the catalog
+   * layer, only being serialized into the REST API format when making the actual HTTP request
+   * according to the spec: namespace parts joined by namespace separator (default 0x1F), followed
+   * by dot, followed by view name, with multiple views comma-separated.
+   */
   String VIEW_IDENTIFIER_KEY = "view.referenced-by";
 
   /**
@@ -37,7 +48,7 @@ public interface ContextAwareTableCatalog {
    * <p>Common context keys:
    *
    * <ul>
-   *   <li>{@link #VIEW_IDENTIFIER_KEY}: The fully qualified identifier of the view referencing this
+   *   <li>{@link #VIEW_IDENTIFIER_KEY}: A List&lt;TableIdentifier&gt; of view(s) referencing this
    *       table
    * </ul>
    *

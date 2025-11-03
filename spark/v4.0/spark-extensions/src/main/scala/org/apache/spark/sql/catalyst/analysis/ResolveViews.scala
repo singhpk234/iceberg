@@ -18,6 +18,9 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.iceberg.catalog.{Namespace => IcebergNamespace}
+import org.apache.iceberg.catalog.{TableIdentifier => IcebergTableIdentifier}
+import org.apache.iceberg.catalog.{ContextAwareTableCatalog => IcebergContextAwareTableCatalog}
 import org.apache.iceberg.spark.ContextAwareTableCatalog
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -66,10 +69,39 @@ case class ResolveViews(spark: SparkSession) extends Rule[LogicalPlan] with Look
         .getOrElse(u)
 
     case u @ UnResolvedRelationFromView(
-      tableParts @ CatalogAndIdentifier(catalog, tableIdent), viewParts, options, isStreaming) =>
+          tableParts @ CatalogAndIdentifier(catalog, tableIdent),
+          viewParts,
+          options,
+          isStreaming) =>
       val context = new java.util.HashMap[String, Object]()
-      context.put(
-        org.apache.iceberg.catalog.ContextAwareTableCatalog.VIEW_IDENTIFIER_KEY, viewParts.mkString("."))
+
+      // Parse viewParts into namespace and view name
+      // viewParts format: Seq("namespace_part1", "namespace_part2", ..., "viewName")
+      // Note: catalog is NOT included in viewParts, it's already resolved via the catalog parameter
+      if (viewParts.nonEmpty) {
+        if (viewParts.length == 1) {
+          // Single part means view name only, no namespace
+          val viewName = viewParts.head
+          val namespace = IcebergNamespace.empty()
+          val viewIdentifier = IcebergTableIdentifier.of(namespace, viewName)
+
+          context.put(
+            IcebergContextAwareTableCatalog.VIEW_IDENTIFIER_KEY,
+            java.util.Collections.singletonList(viewIdentifier))
+        } else {
+          // Multiple parts: all but last are namespace, last is view name
+          val namespaceParts = viewParts.dropRight(1)
+          val viewName = viewParts.last
+
+          val namespace = IcebergNamespace.of(namespaceParts: _*)
+          val viewIdentifier = IcebergTableIdentifier.of(namespace, viewName)
+
+          context.put(
+            IcebergContextAwareTableCatalog.VIEW_IDENTIFIER_KEY,
+            java.util.Collections.singletonList(viewIdentifier))
+        }
+      }
+
       try {
         catalog match {
           case contextAwareCatalog: ContextAwareTableCatalog =>
@@ -77,7 +109,9 @@ case class ResolveViews(spark: SparkSession) extends Rule[LogicalPlan] with Look
             DataSourceV2Relation.create(table, Some(catalog), Some(tableIdent), options)
           case catalog if catalog.asTableCatalog.isInstanceOf[ContextAwareTableCatalog] =>
             val table =
-              catalog.asTableCatalog.asInstanceOf[ContextAwareTableCatalog].loadTable(tableIdent, context)
+              catalog.asTableCatalog
+                .asInstanceOf[ContextAwareTableCatalog]
+                .loadTable(tableIdent, context)
             DataSourceV2Relation.create(table, Some(catalog), Some(tableIdent), options)
           case _ =>
             val table = catalog.asTableCatalog.loadTable(tableIdent)
@@ -132,7 +166,9 @@ case class ResolveViews(spark: SparkSession) extends Rule[LogicalPlan] with Look
 
     // Apply any necessary rewrites to preserve correct resolution
     val viewCatalogAndNamespace: Seq[String] = view.currentCatalog +: view.currentNamespace.toSeq
-    val qualifiedNameParts = Seq(view.currentNamespace.mkString("."), nameParts.last)
+    // qualifiedNameParts: Seq of namespace parts and view name (no catalog)
+    // This will be passed as viewParts to UnResolvedRelationFromView
+    val qualifiedNameParts = view.currentNamespace.toSeq :+ nameParts.last
     val rewritten = rewriteIdentifiers(parsed, viewCatalogAndNamespace, Some(qualifiedNameParts))
 
     // Apply the field aliases and column comments
@@ -161,9 +197,9 @@ case class ResolveViews(spark: SparkSession) extends Rule[LogicalPlan] with Look
   }
 
   private def rewriteIdentifiers(
-    plan: LogicalPlan,
-    catalogAndNamespace: Seq[String],
-    viewIdentifier: Option[Seq[String]] = None): LogicalPlan = {
+      plan: LogicalPlan,
+      catalogAndNamespace: Seq[String],
+      viewIdentifier: Option[Seq[String]] = None): LogicalPlan = {
     // Substitute CTEs and Unresolved Ordinals within the view, then rewrite unresolved functions and relations
     qualifyTableIdentifiers(
       qualifyFunctionIdentifiers(
@@ -190,9 +226,9 @@ case class ResolveViews(spark: SparkSession) extends Rule[LogicalPlan] with Look
    * Qualify table identifiers with default catalog and namespace if necessary.
    */
   private def qualifyTableIdentifiers(
-    child: LogicalPlan,
-    catalogAndNamespace: Seq[String],
-    viewIdentifier: Option[Seq[String]]): LogicalPlan = {
+      child: LogicalPlan,
+      catalogAndNamespace: Seq[String],
+      viewIdentifier: Option[Seq[String]]): LogicalPlan = {
     child transform {
       case u @ UnresolvedRelation(parts, options, isStreaming) =>
         val qualifiedTableId = parts match {
@@ -208,9 +244,9 @@ case class ResolveViews(spark: SparkSession) extends Rule[LogicalPlan] with Look
             u.copy(multipartIdentifier = qualifiedTableId)
         }
       case other =>
-        other.transformExpressions {
-          case subquery: SubqueryExpression =>
-            subquery.withNewPlan(qualifyTableIdentifiers(subquery.plan, catalogAndNamespace, viewIdentifier))
+        other.transformExpressions { case subquery: SubqueryExpression =>
+          subquery.withNewPlan(
+            qualifyTableIdentifiers(subquery.plan, catalogAndNamespace, viewIdentifier))
         }
     }
   }
