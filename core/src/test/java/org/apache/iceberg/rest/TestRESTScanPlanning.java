@@ -43,8 +43,6 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
-import org.apache.iceberg.RESTTable;
-import org.apache.iceberg.RESTTableScan;
 import org.apache.iceberg.Scan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;

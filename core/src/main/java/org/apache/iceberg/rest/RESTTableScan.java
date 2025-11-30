@@ -16,28 +16,37 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iceberg;
+package org.apache.iceberg.rest;
 
+import dev.failsafe.Failsafe;
+import dev.failsafe.FailsafeException;
+import dev.failsafe.RetryPolicy;
+import java.time.Duration;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.iceberg.DataTableScan;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
+import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableScan;
+import org.apache.iceberg.TableScanContext;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.annotations.VisibleForTesting;
-import org.apache.iceberg.rest.Endpoint;
-import org.apache.iceberg.rest.ErrorHandlers;
-import org.apache.iceberg.rest.ParserContext;
-import org.apache.iceberg.rest.PlanStatus;
-import org.apache.iceberg.rest.RESTClient;
-import org.apache.iceberg.rest.ResourcePaths;
 import org.apache.iceberg.rest.requests.PlanTableScanRequest;
 import org.apache.iceberg.rest.responses.FetchPlanningResultResponse;
 import org.apache.iceberg.rest.responses.PlanTableScanResponse;
 import org.apache.iceberg.types.Types;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class RESTTableScan extends DataTableScan {
+class RESTTableScan extends DataTableScan {
+
+  private static final Logger LOG = LoggerFactory.getLogger(RESTTableScan.class);
+
   private final RESTClient client;
   private final Map<String, String> headers;
   private final TableOperations operations;
@@ -49,12 +58,11 @@ public class RESTTableScan extends DataTableScan {
 
   private String currentPlanId = null;
 
-  // TODO revisit if this property should be configurable
-  // Sleep duration between polling attempts for plan completion
-  private static final int FETCH_PLANNING_SLEEP_DURATION_MS = 1000;
-  // Maximum time to wait for scan planning to complete (5 minutes)
-  // This prevents indefinite blocking on server-side planning issues
-  private static final long MAX_WAIT_TIME_MS = 5 * 60 * 1000L;
+  private static final long MIN_SLEEP_MS = 1000; // Initial delay
+  private static final long MAX_SLEEP_MS = 60 * 1000; // Max backoff delay (1 minute)
+  private static final int MAX_ATTEMPTS = 10; // Max number of poll checks
+  private static final long MAX_WAIT_TIME_MS = 5 * 60 * 1000; // Total maximum duration (5 minutes)
+  private static final double SCALE_FACTOR = 2.0; // Exponential scale factor
 
   RESTTableScan(
       Table table,
@@ -157,59 +165,76 @@ public class RESTTableScan extends DataTableScan {
 
       default:
         handleNonSuccessfulTerminalState(planStatus, response.planId());
-        throw new IllegalStateException("Handler should have thrown an exception.");
+        throw new IllegalStateException("Unexpected code path reached in planTableScan");
     }
   }
 
   private CloseableIterable<FileScanTask> fetchPlanningResult(String planId) {
-    // Set the current plan ID for potential cancellation
     currentPlanId = planId;
-    try {
-      long startTime = System.currentTimeMillis();
-      while (System.currentTimeMillis() - startTime <= MAX_WAIT_TIME_MS) {
-        FetchPlanningResultResponse response =
-            client.get(
-                resourcePaths.plan(tableIdentifier, planId),
-                Map.of(),
-                FetchPlanningResultResponse.class,
-                headers,
-                ErrorHandlers.defaultErrorHandler(),
-                parserContext);
 
-        PlanStatus planStatus = response.planStatus();
-        switch (planStatus) {
-          case COMPLETED:
-            return scanTasksIterable(response.planTasks(), response.fileScanTasks());
-          case SUBMITTED:
-            try {
-              // TODO: if we want to add some jitter here to avoid thundering herd.
-              Thread.sleep(FETCH_PLANNING_SLEEP_DURATION_MS);
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              // Attempt to cancel the plan before exiting
-              cancelPlan();
-              throw new RuntimeException("Interrupted while fetching plan status", e);
-            }
-            break;
-        }
+    RetryPolicy<FetchPlanningResultResponse> retryPolicy =
+        RetryPolicy.<FetchPlanningResultResponse>builder()
+            .handleResultIf(response -> response.planStatus() == PlanStatus.SUBMITTED)
+            .withBackoff(
+                Duration.ofMillis(MIN_SLEEP_MS), Duration.ofMillis(MAX_SLEEP_MS), SCALE_FACTOR)
+            .withJitter(0.1) // Add jitter up to 10% of the calculated delay
+            .withMaxAttempts(MAX_ATTEMPTS)
+            .withMaxDuration(Duration.ofMillis(MAX_WAIT_TIME_MS))
+            .onFailedAttempt(
+                e -> {
+                  // Log when a retry occurs
+                  LOG.debug(
+                      "Plan {} still SUBMITTED (Attempt {}/{}). Previous attempt took {} ms.",
+                      planId,
+                      e.getAttemptCount(),
+                      MAX_ATTEMPTS,
+                      e.getElapsedAttemptTime().toMillis());
+                })
+            .onFailure(
+                e -> {
+                  LOG.warn(
+                      "Polling for plan {} failed due to: {}",
+                      planId,
+                      e.getException().getMessage());
+                  cancelPlan();
+                })
+            .build();
+
+    try {
+      FetchPlanningResultResponse finalResponse =
+          Failsafe.with(retryPolicy)
+              .get(
+                  () ->
+                      client.get(
+                          resourcePaths.plan(tableIdentifier, planId),
+                          headers,
+                          FetchPlanningResultResponse.class,
+                          headers,
+                          ErrorHandlers.defaultErrorHandler(),
+                          parserContext));
+
+      PlanStatus finalStatus = finalResponse.planStatus();
+
+      if (finalStatus == PlanStatus.COMPLETED) {
+        return scanTasksIterable(finalResponse.planTasks(), finalResponse.fileScanTasks());
       }
-      // If we reach here, we've exceeded the max wait time
-      // Attempt to cancel the plan before timing out
-      cancelPlan();
+
       throw new IllegalStateException(
           String.format(
-              Locale.ROOT,
-              "Exceeded max wait time of %d ms when fetching planning result for planId: %s",
-              MAX_WAIT_TIME_MS,
-              planId));
+              "Plan finished with unexpected status %s for planId: %s", finalStatus, planId));
+
+    } catch (FailsafeException e) {
+      // FailsafeException is thrown when retries are exhausted (Max Attempts/Duration)
+      // Cleanup is handled by the .onFailure() hook, so we just wrap and rethrow.
+      throw new IllegalStateException(
+          String.format("Polling timed out or exceeded max attempts for planId: %s.", planId), e);
+
     } catch (Exception e) {
-      // Clear the plan ID on any exception (except successful completion)
-      // Also attempt to cancel the plan to clean up server resources
+      // Catch any immediate non-retryable exceptions (e.g., I/O errors, auth errors)
       try {
         cancelPlan();
       } catch (Exception cancelException) {
         // Ignore cancellation failures during exception handling
-        // The original exception is more important
       }
       throw e;
     }
@@ -267,7 +292,7 @@ public class RESTTableScan extends DataTableScan {
             String.format("Received status: %s for planId: %s", PlanStatus.CANCELLED, planId));
       default:
         throw new IllegalStateException(
-            String.format("Invalid planStatus during fetchPlanningResult: %s", status));
+            String.format("Invalid planStatus: %s for planId: %s", status, planId));
     }
   }
 }

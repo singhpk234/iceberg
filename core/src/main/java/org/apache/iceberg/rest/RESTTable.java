@@ -16,18 +16,19 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iceberg;
+package org.apache.iceberg.rest;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.ImmutableTableScanContext;
+import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.metrics.MetricsReporter;
-import org.apache.iceberg.rest.Endpoint;
-import org.apache.iceberg.rest.RESTClient;
-import org.apache.iceberg.rest.ResourcePaths;
 
-public class RESTTable extends BaseTable {
+class RESTTable extends BaseTable {
   private final RESTClient client;
   private final Supplier<Map<String, String>> headers;
   private final MetricsReporter reporter;
@@ -35,7 +36,7 @@ public class RESTTable extends BaseTable {
   private final TableIdentifier tableIdentifier;
   private final Set<Endpoint> supportedEndpoints;
 
-  public RESTTable(
+  RESTTable(
       TableOperations ops,
       String name,
       MetricsReporter reporter,
