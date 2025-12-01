@@ -57,7 +57,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.rest.responses.ErrorResponse;
-import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -72,14 +71,9 @@ public class TestRESTScanPlanning {
 
   @TempDir protected Path temp;
 
-  protected RESTCatalogTestInfrastructure infrastructure = new RESTCatalogTestInfrastructure();
-
-  // Expose infrastructure components as protected fields for backward compatibility
-  protected RESTCatalog restCatalog;
-  protected InMemoryCatalog backendCatalog;
-  protected Server httpServer;
-  protected RESTCatalogAdapter adapterForRESTServer;
-  protected ParserContext parserContext;
+  private final RESTCatalogTestInfrastructure infrastructure = new RESTCatalogTestInfrastructure();
+  private InMemoryCatalog backendCatalog;
+  private RESTCatalogAdapter adapterForRESTServer;
 
   // Scan-planning-specific fields
   private RESTCatalog restCatalogWithScanPlanning;
@@ -88,7 +82,6 @@ public class TestRESTScanPlanning {
   public void setupCatalogs() throws Exception {
     infrastructure.before(temp);
     this.backendCatalog = infrastructure.backendCatalog();
-    this.httpServer = infrastructure.httpServer();
     this.adapterForRESTServer = infrastructure.adapter();
 
     // Initialize catalog with scan planning enabled
@@ -118,7 +111,6 @@ public class TestRESTScanPlanning {
 
   private void setParserContext(org.apache.iceberg.Table table) {
     infrastructure.setParserContext(table);
-    this.parserContext = infrastructure.parserContext();
   }
 
   private RESTCatalog scanPlanningCatalog() {
@@ -237,8 +229,6 @@ public class TestRESTScanPlanning {
   @ParameterizedTest
   @EnumSource(PlanningMode.class)
   public void scanPlanningWithAllTasksInSingleResponse() throws IOException {
-    configurePlanningBehavior(TestPlanningBehavior.Builder::synchronous);
-
     Table table = restTableFor(scanPlanningCatalog(), "all_tasks_table");
     setParserContext(table);
 
@@ -270,13 +260,13 @@ public class TestRESTScanPlanning {
           .anySatisfy(task -> assertThat(task.file().location()).isEqualTo(FILE_A.location()));
       assertThat(tasks)
           .anySatisfy(task -> assertThat(task.file().location()).isEqualTo(FILE_B.location()));
-      assertThat(tasks.get(0).deletes()).isEmpty(); // 0 delete files
-      assertThat(tasks.get(1).deletes()).isEmpty(); // 0 delete files
+      assertThat(tasks.get(0).deletes()).isEmpty();
+      assertThat(tasks.get(1).deletes()).isEmpty();
     }
   }
 
   @Test
-  public void testCancelPlanMethodAvailability() {
+  public void cancelPlanMethodAvailability() {
     configurePlanningBehavior(TestPlanningBehavior.Builder::synchronousWithPagination);
     RESTTable table = restTableFor(scanPlanningCatalog(), "cancel_method_table");
     RESTTableScan restTableScan = restTableScanFor(table);
@@ -290,7 +280,7 @@ public class TestRESTScanPlanning {
   }
 
   @Test
-  public void testIterableCloseTriggersCancel() throws IOException {
+  public void iterableCloseTriggersCancel() throws IOException {
     configurePlanningBehavior(TestPlanningBehavior.Builder::asynchronous);
     RESTTable restTable = restTableFor(scanPlanningCatalog(), "iterable_close_test");
     setParserContext(restTable);
@@ -313,9 +303,10 @@ public class TestRESTScanPlanning {
 
   @ParameterizedTest
   @EnumSource(MetadataTableType.class)
-  public void testMetadataTablesWithRemotePlanning(MetadataTableType type) {
-    // POSITION_DELETES table does not implement newScan() method
-    assumeThat(type).isNotEqualTo(MetadataTableType.POSITION_DELETES);
+  public void metadataTablesWithRemotePlanning(MetadataTableType type) {
+    assumeThat(type)
+        .as("POSITION_DELETES table does not implement newScan() method")
+        .isNotEqualTo(MetadataTableType.POSITION_DELETES);
 
     configurePlanningBehavior(TestPlanningBehavior.Builder::synchronous);
     RESTTable table = restTableFor(scanPlanningCatalog(), "metadata_tables_test");
@@ -543,20 +534,22 @@ public class TestRESTScanPlanning {
 
       // Verify FILE_B with position deletes
       FileScanTask fileBTask =
-          tasks.stream()
-              .filter(task -> task.file().location().equals(FILE_B.location()))
-              .findFirst()
-              .orElseThrow(() -> new AssertionError("Expected FILE_B in scan tasks"));
+          assertThat(tasks)
+              .filteredOn(task -> task.file().location().equals(FILE_B.location()))
+              .first()
+              .as("Expected FILE_B in scan tasks")
+              .actual();
       assertThat(fileBTask.deletes()).isNotEmpty(); // Has delete files
       assertThat(fileBTask.deletes().stream().map(DeleteFile::location))
           .contains(FILE_B_DELETES.location()); // FILE_B_DELETES is present
 
       // Verify FILE_C with equality deletes
       FileScanTask fileCTask =
-          tasks.stream()
-              .filter(task -> task.file().location().equals(FILE_C.location()))
-              .findFirst()
-              .orElseThrow(() -> new AssertionError("Expected FILE_C in scan tasks"));
+          assertThat(tasks)
+              .filteredOn(task -> task.file().location().equals(FILE_C.location()))
+              .first()
+              .as("Expected FILE_C in scan tasks")
+              .actual();
       assertThat(fileCTask.deletes()).isNotEmpty(); // Has delete files
       assertThat(fileCTask.deletes().stream().map(DeleteFile::location))
           .contains(FILE_C_EQUALITY_DELETES.location()); // FILE_C_EQUALITY_DELETES is present
@@ -597,10 +590,11 @@ public class TestRESTScanPlanning {
 
       // FILE_B should have FILE_B_EQUALITY_DELETES
       FileScanTask fileBTask =
-          tasks.stream()
-              .filter(task -> task.file().location().equals(FILE_B.location()))
-              .findFirst()
-              .orElseThrow(() -> new AssertionError("Expected FILE_B in scan tasks"));
+          assertThat(tasks)
+              .filteredOn(task -> task.file().location().equals(FILE_B.location()))
+              .first()
+              .as("Expected FILE_B in scan tasks")
+              .actual();
       assertThat(fileBTask.deletes()).hasSize(1); // 1 delete file: FILE_B_EQUALITY_DELETES
       assertThat(fileBTask.deletes().get(0).location())
           .isEqualTo(FILE_B_EQUALITY_DELETES.location());
@@ -701,12 +695,12 @@ public class TestRESTScanPlanning {
     assertThat(fileATask.deletes().get(0).location()).isEqualTo(FILE_A_DELETES.location());
 
     // Verify FILE_B and FILE_C have no deletes at snapshot 4
-    tasks3.stream()
-        .filter(
+    assertThat(tasks3)
+        .filteredOn(
             task ->
                 task.file().location().equals(FILE_B.location())
                     || task.file().location().equals(FILE_C.location()))
-        .forEach(task -> assertThat(task.deletes()).isEmpty());
+        .allMatch(task -> task.deletes().isEmpty());
   }
 
   // ==================== Endpoint Support Tests ====================
@@ -781,7 +775,7 @@ public class TestRESTScanPlanning {
   }
 
   @Test
-  public void testServerDoesNotSupportPlanningEndpoint() throws IOException {
+  public void serverDoesNotSupportPlanningEndpoint() throws IOException {
     // Server doesn't support scan planning at all - should fall back to client-side planning
     CatalogWithAdapter catalogWithAdapter = catalogWithEndpoints(baseCatalogEndpoints(), null);
     RESTCatalog catalog = catalogWithAdapter.catalog;
@@ -798,7 +792,7 @@ public class TestRESTScanPlanning {
   }
 
   @Test
-  public void testServerSupportsPlanningSyncOnlyNotAsync() throws IOException {
+  public void serverSupportsPlanningSyncOnlyNotAsync() {
     // Server supports submit (sync) but not fetch (async polling)
     // Use ASYNC planning to trigger SUBMITTED status, which will hit the Endpoint.check()
     CatalogWithAdapter catalogWithAdapter =
@@ -813,14 +807,13 @@ public class TestRESTScanPlanning {
 
     // Should fail with UnsupportedOperationException when trying to fetch async plan result
     // because V1_FETCH_TABLE_SCAN_PLAN endpoint is not supported
-    assertThatThrownBy(() -> restTableScanFor(table).planFiles().iterator().hasNext())
+    assertThatThrownBy(restTableScanFor(table)::planFiles)
         .isInstanceOf(UnsupportedOperationException.class)
-        .hasMessageContaining("Server does not support endpoint")
-        .hasMessageContaining(Endpoint.V1_FETCH_TABLE_SCAN_PLAN.toString());
+        .hasMessage("Server does not support endpoint: %s", Endpoint.V1_FETCH_TABLE_SCAN_PLAN);
   }
 
   @Test
-  public void testServerSupportsPlanningButNotPagination() throws IOException {
+  public void serverSupportsPlanningButNotPagination() {
     // Server supports planning but not task pagination endpoint
     // Use synchronousWithPagination (tasksPerPage=1) to trigger pagination, which will hit
     // Endpoint.check()
@@ -840,14 +833,14 @@ public class TestRESTScanPlanning {
 
     // Should fail with UnsupportedOperationException when trying to fetch paginated tasks
     // because V1_FETCH_TABLE_SCAN_PLAN_TASKS endpoint is not supported
-    assertThatThrownBy(() -> scan.planFiles().iterator().hasNext())
+    assertThatThrownBy(scan::planFiles)
         .isInstanceOf(UnsupportedOperationException.class)
-        .hasMessageContaining("Server does not support endpoint")
-        .hasMessageContaining(Endpoint.V1_FETCH_TABLE_SCAN_PLAN_TASKS.toString());
+        .hasMessage(
+            "Server does not support endpoint: %s", Endpoint.V1_FETCH_TABLE_SCAN_PLAN_TASKS);
   }
 
   @Test
-  public void testServerSupportsPlanningButNotCancellation() throws IOException {
+  public void serverSupportsPlanningButNotCancellation() throws IOException {
     // Server supports planning but not the cancel endpoint
     CatalogWithAdapter catalogWithAdapter =
         catalogWithEndpoints(

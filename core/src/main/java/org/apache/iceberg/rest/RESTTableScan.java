@@ -132,7 +132,6 @@ class RESTTableScan extends DataTableScan {
           .withStartSnapshotId(startSnapshotId)
           .withEndSnapshotId(endSnapshotId)
           .withUseSnapshotSchema(true);
-
     } else if (snapshotId != null) {
       boolean useSnapShotSchema = snapshotId != table.currentSnapshot().snapshotId();
       planTableScanRequestBuilder
@@ -222,19 +221,18 @@ class RESTTableScan extends DataTableScan {
       throw new IllegalStateException(
           String.format(
               "Plan finished with unexpected status %s for planId: %s", finalStatus, planId));
-
     } catch (FailsafeException e) {
       // FailsafeException is thrown when retries are exhausted (Max Attempts/Duration)
       // Cleanup is handled by the .onFailure() hook, so we just wrap and rethrow.
       throw new IllegalStateException(
           String.format("Polling timed out or exceeded max attempts for planId: %s.", planId), e);
-
     } catch (Exception e) {
       // Catch any immediate non-retryable exceptions (e.g., I/O errors, auth errors)
       try {
         cancelPlan();
       } catch (Exception cancelException) {
         // Ignore cancellation failures during exception handling
+        e.addSuppressed(cancelException);
       }
       throw e;
     }
