@@ -47,10 +47,13 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Scan;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
@@ -281,7 +284,7 @@ public class TestRESTScanPlanning {
   // ==================== Test Planning Behavior ====================
 
   /** Enum for parameterized tests to test both synchronous and asynchronous planning modes. */
-  enum PlanningMode
+  private enum PlanningMode
       implements Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> {
     SYNCHRONOUS(TestPlanningBehavior.Builder::synchronous),
     ASYNCHRONOUS(TestPlanningBehavior.Builder::asynchronous);
@@ -366,7 +369,7 @@ public class TestRESTScanPlanning {
 
       assertThat(tasks).hasSize(1); // 1 data file: FILE_A
       assertThat(tasks.get(0).file().location()).isEqualTo(FILE_A.location());
-      assertThat(tasks.get(0).deletes()).isEmpty(); // 0 delete files
+      assertThat(tasks.get(0).deletes()).isEmpty();
     }
   }
 
@@ -403,7 +406,7 @@ public class TestRESTScanPlanning {
     // When no plan is active, it should return false
     assertThat(restTableScan.cancelPlan()).isFalse();
 
-    // Verify the method exists and doesn't throw exceptions when called multiple times
+    // Verify the method doesn't throw exceptions when called multiple times
     assertThat(restTableScan.cancelPlan()).isFalse();
   }
 
@@ -594,7 +597,7 @@ public class TestRESTScanPlanning {
     setParserContext(table);
 
     // Add both position and equality deletes in separate commits
-    table.newRowDelta().addDeletes(FILE_A_DELETES).commit(); // Position deletes for FILE_A
+    table.newRowDelta().addDeletes(FILE_A_DELETES).commit();
     table
         .newRowDelta()
         .addDeletes(FILE_B_EQUALITY_DELETES)
@@ -637,9 +640,9 @@ public class TestRESTScanPlanning {
     // Add multiple delete files corresponding to FILE_A, FILE_B, FILE_C
     table
         .newRowDelta()
-        .addDeletes(FILE_A_DELETES) // Position delete for FILE_A
-        .addDeletes(FILE_B_DELETES) // Position delete for FILE_B
-        .addDeletes(FILE_C_EQUALITY_DELETES) // Equality delete for FILE_C
+        .addDeletes(FILE_A_DELETES)
+        .addDeletes(FILE_B_DELETES)
+        .addDeletes(FILE_C_EQUALITY_DELETES)
         .commit();
 
     // Execute scan planning with multiple delete files
@@ -829,6 +832,56 @@ public class TestRESTScanPlanning {
                 task.file().location().equals(FILE_B.location())
                     || task.file().location().equals(FILE_C.location()))
         .allMatch(task -> task.deletes().isEmpty());
+  }
+
+  @ParameterizedTest
+  @EnumSource(PlanningMode.class)
+  public void scanPlanningWithMultiplePartitionSpecs() throws IOException {
+    configurePlanningBehavior(TestPlanningBehavior.Builder::synchronous);
+
+    RESTTable table = restTableFor(scanPlanningCatalog(), "multiple_partition_specs");
+    table.newFastAppend().appendFile(FILE_B).commit();
+
+    // Evolve partition spec to bucket by id with 8 buckets instead of 16
+    table.updateSpec().removeField("id_bucket").addField(Expressions.bucket("id", 8)).commit();
+
+    // Create data file with new partition spec (spec-id=1)
+    PartitionSpec newSpec = table.spec();
+    assertThat(newSpec.specId()).isEqualTo(1);
+
+    DataFile fileWithNewSpec =
+        DataFiles.builder(newSpec)
+            .withPath("/path/to/data-new-spec.parquet")
+            .withFileSizeInBytes(10)
+            .withPartitionPath("id_bucket_8=3") // 8-bucket partition
+            .withRecordCount(2)
+            .build();
+
+    table.newFastAppend().appendFile(fileWithNewSpec).commit();
+    setParserContext(table);
+
+    // Scan table - should return all 3 files despite different partition specs
+    try (CloseableIterable<FileScanTask> iterable = table.newScan().planFiles()) {
+      List<FileScanTask> tasks = Lists.newArrayList(iterable);
+
+      // Verify all 3 files are present
+      assertThat(tasks).hasSize(3);
+      assertThat(tasks)
+          .map(task -> task.file().location())
+          .containsExactlyInAnyOrder(
+              FILE_A.location(), FILE_B.location(), fileWithNewSpec.location());
+
+      // Verify files have correct partition spec IDs
+      assertThat(tasks)
+          .filteredOn(
+              task ->
+                  task.file().location().equals(FILE_A.location())
+                      || task.file().location().equals(FILE_B.location()))
+          .allMatch(task -> task.spec().specId() == 0);
+      assertThat(tasks)
+          .filteredOn(task -> task.file().location().equals(fileWithNewSpec.location()))
+          .allMatch(task -> task.spec().specId() == 1);
+    }
   }
 
   // ==================== Endpoint Support Tests ====================

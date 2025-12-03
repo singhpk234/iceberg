@@ -38,9 +38,12 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.rest.requests.FetchScanTasksRequest;
 import org.apache.iceberg.rest.responses.FetchScanTasksResponse;
 import org.apache.iceberg.util.ThreadPools;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class ScanTasksIterable implements CloseableIterable<FileScanTask> {
 
+  private static final Logger LOG = LoggerFactory.getLogger(ScanTasksIterable.class);
   private static final int DEFAULT_TASK_QUEUE_CAPACITY = 1000;
   private static final long QUEUE_POLL_TIMEOUT_MS = 100;
   private static final int WORKER_POOL_SIZE = Math.max(1, ThreadPools.WORKER_THREAD_POOL_SIZE / 4);
@@ -224,9 +227,8 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
       shutdown.set(true);
-
       if (cancellationCallback != null) {
         try {
           @SuppressWarnings("unused")
@@ -235,7 +237,10 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
           // Ignore cancellation failures
         }
       }
-
+      LOG.info(
+          "ScanTasksIterator is closing. Clearing {} queued tasks and {} plan tasks.",
+          taskQueue.size(),
+          planTasks.size());
       taskQueue.clear();
       planTasks.clear();
     }
