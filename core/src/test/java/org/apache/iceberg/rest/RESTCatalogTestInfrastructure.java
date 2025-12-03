@@ -53,7 +53,6 @@ public class RESTCatalogTestInfrastructure {
 
   public void before(Path temp) throws Exception {
     File warehouse = temp.toFile();
-
     this.backendCatalog = new InMemoryCatalog();
     this.backendCatalog.initialize(
         "in-memory",
@@ -217,9 +216,5 @@ public class RESTCatalogTestInfrastructure {
   public void setParserContext(org.apache.iceberg.Table table) {
     parserContext =
         ParserContext.builder().add("specsById", table.specs()).add("caseSensitive", false).build();
-  }
-
-  public ParserContext parserContext() {
-    return parserContext;
   }
 }

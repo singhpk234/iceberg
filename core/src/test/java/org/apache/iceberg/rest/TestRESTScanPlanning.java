@@ -32,12 +32,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assumptions.assumeThat;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
@@ -57,6 +65,10 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.rest.responses.ErrorResponse;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.handler.gzip.GzipHandler;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -67,22 +79,77 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
 
 public class TestRESTScanPlanning {
+  protected static final ObjectMapper MAPPER = RESTObjectMapper.mapper();
+
+  protected RESTCatalog restCatalog;
+  protected InMemoryCatalog backendCatalog;
+  protected Server httpServer;
+  protected RESTCatalogAdapter adapterForRESTServer;
+  protected ParserContext parserContext;
   protected static final Namespace NS = Namespace.of("ns");
 
-  @TempDir protected Path temp;
-
-  private final RESTCatalogTestInfrastructure infrastructure = new RESTCatalogTestInfrastructure();
-  private InMemoryCatalog backendCatalog;
-  private RESTCatalogAdapter adapterForRESTServer;
+  @TempDir private Path temp;
 
   // Scan-planning-specific fields
   private RESTCatalog restCatalogWithScanPlanning;
 
   @BeforeEach
   public void setupCatalogs() throws Exception {
-    infrastructure.before(temp);
-    this.backendCatalog = infrastructure.backendCatalog();
-    this.adapterForRESTServer = infrastructure.adapter();
+    File warehouse = temp.toFile();
+    this.backendCatalog = new InMemoryCatalog();
+    this.backendCatalog.initialize(
+            "in-memory",
+            ImmutableMap.of(CatalogProperties.WAREHOUSE_LOCATION, warehouse.getAbsolutePath()));
+
+    HTTPHeaders catalogHeaders =
+            HTTPHeaders.of(
+                    Map.of(
+                            "Authorization",
+                            "Bearer client-credentials-token:sub=catalog",
+                            "test-header",
+                            "test-value"));
+    HTTPHeaders contextHeaders =
+            HTTPHeaders.of(
+                    Map.of(
+                            "Authorization",
+                            "Bearer client-credentials-token:sub=user",
+                            "test-header",
+                            "test-value"));
+
+    adapterForRESTServer =
+            Mockito.spy(
+                    new RESTCatalogAdapter(backendCatalog) {
+                      @Override
+                      public <T extends RESTResponse> T execute(
+                              HTTPRequest request,
+                              Class<T> responseType,
+                              Consumer<ErrorResponse> errorHandler,
+                              Consumer<Map<String, String>> responseHeaders) {
+                        // this doesn't use a Mockito spy because this is used for catalog tests, which have
+                        // different method calls
+                        if (!ResourcePaths.tokens().equals(request.path())) {
+                          if (ResourcePaths.config().equals(request.path())) {
+                            assertThat(request.headers().entries()).containsAll(catalogHeaders.entries());
+                          } else {
+                            assertThat(request.headers().entries()).containsAll(contextHeaders.entries());
+                          }
+                        }
+                        Object body = roundTripSerialize(request.body(), "request");
+                        HTTPRequest req = ImmutableHTTPRequest.builder().from(request).body(body).build();
+                        T response = super.execute(req, responseType, errorHandler, responseHeaders);
+                        return roundTripSerialize(response, "response");
+                      }
+                    });
+
+    ServletContextHandler servletContext =
+            new ServletContextHandler(ServletContextHandler.NO_SESSIONS);
+    servletContext.addServlet(
+            new ServletHolder(new RESTCatalogServlet(adapterForRESTServer)), "/*");
+    servletContext.setHandler(new GzipHandler());
+
+    this.httpServer = new Server(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+    httpServer.setHandler(servletContext);
+    httpServer.start();
 
     // Initialize catalog with scan planning enabled
     this.restCatalogWithScanPlanning =
@@ -96,13 +163,77 @@ public class TestRESTScanPlanning {
     if (restCatalogWithScanPlanning != null) {
       restCatalogWithScanPlanning.close();
     }
-    infrastructure.after();
+    if (backendCatalog != null) {
+      backendCatalog.close();
+    }
+
+    if (httpServer != null) {
+      httpServer.stop();
+      httpServer.join();
+    }
   }
 
   // ==================== Helper Methods ====================
 
   private RESTCatalog initCatalog(String catalogName, Map<String, String> additionalProperties) {
-    return infrastructure.initCatalog(catalogName, additionalProperties);
+    Configuration conf = new Configuration();
+    SessionCatalog.SessionContext context =
+            new SessionCatalog.SessionContext(
+                    UUID.randomUUID().toString(),
+                    "user",
+                    ImmutableMap.of("credential", "user:12345"),
+                    ImmutableMap.of());
+
+    RESTCatalog catalog =
+            new RESTCatalog(
+                    context,
+                    (config) ->
+                            HTTPClient.builder(config)
+                                    .uri(config.get(CatalogProperties.URI))
+                                    .withHeaders(RESTUtil.configHeaders(config))
+                                    .build());
+    catalog.setConf(conf);
+    Map<String, String> properties =
+            ImmutableMap.of(
+                    CatalogProperties.URI,
+                    httpServer.getURI().toString(),
+                    CatalogProperties.FILE_IO_IMPL,
+                    "org.apache.iceberg.inmemory.InMemoryFileIO",
+                    "credential",
+                    "catalog:12345",
+                    "header.test-header",
+                    "test-value");
+    catalog.initialize(
+            catalogName,
+            ImmutableMap.<String, String>builder()
+                    .putAll(properties)
+                    .putAll(additionalProperties)
+                    .build());
+    return catalog;
+  }
+
+  @SuppressWarnings("unchecked")
+  public <T> T roundTripSerialize(T payload, String description) {
+    if (payload == null) {
+      return null;
+    }
+
+    try {
+      if (payload instanceof RESTMessage) {
+        RESTMessage message = (RESTMessage) payload;
+        ObjectReader reader = MAPPER.readerFor(message.getClass());
+        if (parserContext != null && !parserContext.isEmpty()) {
+          reader = reader.with(parserContext.toInjectableValues());
+        }
+        return (T) reader.readValue(MAPPER.writeValueAsString(message));
+      } else {
+        // use Map so that Jackson doesn't try to instantiate ImmutableMap from payload.getClass()
+        return (T) MAPPER.readValue(MAPPER.writeValueAsString(payload), Map.class);
+      }
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException(
+              String.format("Failed to serialize and deserialize %s: %s", description, payload), e);
+    }
   }
 
   private boolean requiresNamespaceCreate() {
@@ -110,7 +241,8 @@ public class TestRESTScanPlanning {
   }
 
   private void setParserContext(org.apache.iceberg.Table table) {
-    infrastructure.setParserContext(table);
+    parserContext =
+            ParserContext.builder().add("specsById", table.specs()).add("caseSensitive", false).build();
   }
 
   private RESTCatalog scanPlanningCatalog() {
