@@ -36,6 +36,7 @@ import org.apache.iceberg.TableScanContext;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.annotations.VisibleForTesting;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.rest.requests.PlanTableScanRequest;
 import org.apache.iceberg.rest.responses.FetchPlanningResultResponse;
 import org.apache.iceberg.rest.responses.PlanTableScanResponse;
@@ -44,8 +45,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class RESTTableScan extends DataTableScan {
-
   private static final Logger LOG = LoggerFactory.getLogger(RESTTableScan.class);
+  private static final long MIN_SLEEP_MS = 1000; // Initial delay
+  private static final long MAX_SLEEP_MS = 60 * 1000; // Max backoff delay (1 minute)
+  private static final int MAX_ATTEMPTS = 10; // Max number of poll checks
+  private static final long MAX_WAIT_TIME_MS = 5 * 60 * 1000; // Total maximum duration (5 minutes)
+  private static final double SCALE_FACTOR = 2.0; // Exponential scale factor
 
   private final RESTClient client;
   private final Map<String, String> headers;
@@ -55,14 +60,7 @@ class RESTTableScan extends DataTableScan {
   private final TableIdentifier tableIdentifier;
   private final Set<Endpoint> supportedEndpoints;
   private final ParserContext parserContext;
-
   private String currentPlanId = null;
-
-  private static final long MIN_SLEEP_MS = 1000; // Initial delay
-  private static final long MAX_SLEEP_MS = 60 * 1000; // Max backoff delay (1 minute)
-  private static final int MAX_ATTEMPTS = 10; // Max number of poll checks
-  private static final long MAX_WAIT_TIME_MS = 5 * 60 * 1000; // Total maximum duration (5 minutes)
-  private static final double SCALE_FACTOR = 2.0; // Exponential scale factor
 
   RESTTableScan(
       Table table,
@@ -120,7 +118,7 @@ class RESTTableScan extends DataTableScan {
               .collect(Collectors.toList());
     }
 
-    PlanTableScanRequest.Builder planTableScanRequestBuilder =
+    PlanTableScanRequest.Builder builder =
         PlanTableScanRequest.builder()
             .withSelect(selectedColumns)
             .withFilter(filter())
@@ -128,18 +126,16 @@ class RESTTableScan extends DataTableScan {
             .withStatsFields(statsFields);
 
     if (startSnapshotId != null && endSnapshotId != null) {
-      planTableScanRequestBuilder
+      builder
           .withStartSnapshotId(startSnapshotId)
           .withEndSnapshotId(endSnapshotId)
           .withUseSnapshotSchema(true);
     } else if (snapshotId != null) {
       boolean useSnapShotSchema = snapshotId != table.currentSnapshot().snapshotId();
-      planTableScanRequestBuilder
-          .withSnapshotId(snapshotId)
-          .withUseSnapshotSchema(useSnapShotSchema);
+      builder.withSnapshotId(snapshotId).withUseSnapshotSchema(useSnapShotSchema);
     }
 
-    return planTableScan(planTableScanRequestBuilder.build());
+    return planTableScan(builder.build());
   }
 
   private CloseableIterable<FileScanTask> planTableScan(PlanTableScanRequest planTableScanRequest) {
@@ -161,10 +157,17 @@ class RESTTableScan extends DataTableScan {
       case SUBMITTED:
         Endpoint.check(supportedEndpoints, Endpoint.V1_FETCH_TABLE_SCAN_PLAN);
         return fetchPlanningResult(response.planId());
-
+      case FAILED:
+        throw new IllegalStateException(
+            String.format(
+                "Received status: %s for planId: %s", PlanStatus.FAILED, response.planId()));
+      case CANCELLED:
+        throw new IllegalStateException(
+            String.format(
+                "Received status: %s for planId: %s", PlanStatus.CANCELLED, response.planId()));
       default:
-        handleNonSuccessfulTerminalState(planStatus, response.planId());
-        throw new IllegalStateException("Unexpected code path reached in planTableScan");
+        throw new IllegalStateException(
+            String.format("Invalid planStatus: %s for planId: %s", planStatus, response.planId()));
     }
   }
 
@@ -200,7 +203,7 @@ class RESTTableScan extends DataTableScan {
             .build();
 
     try {
-      FetchPlanningResultResponse finalResponse =
+      FetchPlanningResultResponse response =
           Failsafe.with(retryPolicy)
               .get(
                   () ->
@@ -211,16 +214,13 @@ class RESTTableScan extends DataTableScan {
                           headers,
                           ErrorHandlers.defaultErrorHandler(),
                           parserContext));
+      Preconditions.checkState(
+          response.planStatus() == PlanStatus.COMPLETED,
+          "Plan finished with unexpected status %s for planId: %s",
+          response.planStatus(),
+          planId);
 
-      PlanStatus finalStatus = finalResponse.planStatus();
-
-      if (finalStatus == PlanStatus.COMPLETED) {
-        return scanTasksIterable(finalResponse.planTasks(), finalResponse.fileScanTasks());
-      }
-
-      throw new IllegalStateException(
-          String.format(
-              "Plan finished with unexpected status %s for planId: %s", finalStatus, planId));
+      return scanTasksIterable(response.planTasks(), response.fileScanTasks());
     } catch (FailsafeException e) {
       // FailsafeException is thrown when retries are exhausted (Max Attempts/Duration)
       // Cleanup is handled by the .onFailure() hook, so we just wrap and rethrow.
@@ -277,20 +277,6 @@ class RESTTableScan extends DataTableScan {
     } catch (Exception e) {
       // Plan might have already completed or failed, which is acceptable
       return false;
-    }
-  }
-
-  private void handleNonSuccessfulTerminalState(PlanStatus status, String planId) {
-    switch (status) {
-      case FAILED:
-        throw new IllegalStateException(
-            String.format("Received status: %s for planId: %s", PlanStatus.FAILED, planId));
-      case CANCELLED:
-        throw new IllegalStateException(
-            String.format("Received status: %s for planId: %s", PlanStatus.CANCELLED, planId));
-      default:
-        throw new IllegalStateException(
-            String.format("Invalid planStatus: %s for planId: %s", status, planId));
     }
   }
 }

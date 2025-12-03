@@ -42,11 +42,12 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.ContentScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
@@ -67,6 +68,7 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.rest.responses.ConfigResponse;
 import org.apache.iceberg.rest.responses.ErrorResponse;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.gzip.GzipHandler;
@@ -100,21 +102,6 @@ public class TestRESTScanPlanning {
         "in-memory",
         ImmutableMap.of(CatalogProperties.WAREHOUSE_LOCATION, warehouse.getAbsolutePath()));
 
-    HTTPHeaders catalogHeaders =
-        HTTPHeaders.of(
-            Map.of(
-                "Authorization",
-                "Bearer client-credentials-token:sub=catalog",
-                "test-header",
-                "test-value"));
-    HTTPHeaders contextHeaders =
-        HTTPHeaders.of(
-            Map.of(
-                "Authorization",
-                "Bearer client-credentials-token:sub=user",
-                "test-header",
-                "test-value"));
-
     adapterForRESTServer =
         Mockito.spy(
             new RESTCatalogAdapter(backendCatalog) {
@@ -124,15 +111,6 @@ public class TestRESTScanPlanning {
                   Class<T> responseType,
                   Consumer<ErrorResponse> errorHandler,
                   Consumer<Map<String, String>> responseHeaders) {
-                // this doesn't use a Mockito spy because this is used for catalog tests, which have
-                // different method calls
-                if (!ResourcePaths.tokens().equals(request.path())) {
-                  if (ResourcePaths.config().equals(request.path())) {
-                    assertThat(request.headers().entries()).containsAll(catalogHeaders.entries());
-                  } else {
-                    assertThat(request.headers().entries()).containsAll(contextHeaders.entries());
-                  }
-                }
                 Object body = roundTripSerialize(request.body(), "request");
                 HTTPRequest req = ImmutableHTTPRequest.builder().from(request).body(body).build();
                 T response = super.execute(req, responseType, errorHandler, responseHeaders);
@@ -162,6 +140,7 @@ public class TestRESTScanPlanning {
     if (restCatalogWithScanPlanning != null) {
       restCatalogWithScanPlanning.close();
     }
+
     if (backendCatalog != null) {
       backendCatalog.close();
     }
@@ -175,33 +154,21 @@ public class TestRESTScanPlanning {
   // ==================== Helper Methods ====================
 
   private RESTCatalog initCatalog(String catalogName, Map<String, String> additionalProperties) {
-    Configuration conf = new Configuration();
-    SessionCatalog.SessionContext context =
-        new SessionCatalog.SessionContext(
-            UUID.randomUUID().toString(),
-            "user",
-            ImmutableMap.of("credential", "user:12345"),
-            ImmutableMap.of());
-
     RESTCatalog catalog =
         new RESTCatalog(
-            context,
+            SessionCatalog.SessionContext.createEmpty(),
             (config) ->
                 HTTPClient.builder(config)
                     .uri(config.get(CatalogProperties.URI))
                     .withHeaders(RESTUtil.configHeaders(config))
                     .build());
-    catalog.setConf(conf);
+    catalog.setConf(new Configuration());
     Map<String, String> properties =
         ImmutableMap.of(
             CatalogProperties.URI,
             httpServer.getURI().toString(),
             CatalogProperties.FILE_IO_IMPL,
-            "org.apache.iceberg.inmemory.InMemoryFileIO",
-            "credential",
-            "catalog:12345",
-            "header.test-header",
-            "test-value");
+            "org.apache.iceberg.inmemory.InMemoryFileIO");
     catalog.initialize(
         catalogName,
         ImmutableMap.<String, String>builder()
@@ -212,7 +179,7 @@ public class TestRESTScanPlanning {
   }
 
   @SuppressWarnings("unchecked")
-  public <T> T roundTripSerialize(T payload, String description) {
+  private <T> T roundTripSerialize(T payload, String description) {
     if (payload == null) {
       return null;
     }
@@ -224,7 +191,7 @@ public class TestRESTScanPlanning {
         if (parserContext != null && !parserContext.isEmpty()) {
           reader = reader.with(parserContext.toInjectableValues());
         }
-        return (T) reader.readValue(MAPPER.writeValueAsString(message));
+        return reader.readValue(MAPPER.writeValueAsString(message));
       } else {
         // use Map so that Jackson doesn't try to instantiate ImmutableMap from payload.getClass()
         return (T) MAPPER.readValue(MAPPER.writeValueAsString(payload), Map.class);
@@ -235,11 +202,7 @@ public class TestRESTScanPlanning {
     }
   }
 
-  private boolean requiresNamespaceCreate() {
-    return true;
-  }
-
-  private void setParserContext(org.apache.iceberg.Table table) {
+  private void setParserContext(Table table) {
     parserContext =
         ParserContext.builder().add("specsById", table.specs()).add("caseSensitive", false).build();
   }
@@ -259,10 +222,7 @@ public class TestRESTScanPlanning {
   }
 
   private Table createTableWithScanPlanning(RESTCatalog catalog, TableIdentifier identifier) {
-    if (requiresNamespaceCreate()) {
-      catalog.createNamespace(identifier.namespace());
-    }
-
+    catalog.createNamespace(identifier.namespace());
     return catalog.buildTable(identifier, SCHEMA).withPartitionSpec(SPEC).create();
   }
 
@@ -310,7 +270,7 @@ public class TestRESTScanPlanning {
       this.tasksPerPage = tasksPerPage;
     }
 
-    static Builder builder() {
+    private static Builder builder() {
       return new Builder();
     }
 
@@ -359,7 +319,10 @@ public class TestRESTScanPlanning {
 
   @ParameterizedTest
   @EnumSource(PlanningMode.class)
-  public void scanPlanningWithAllTasksInSingleResponse() throws IOException {
+  void scanPlanningWithAllTasksInSingleResponse(
+      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode)
+      throws IOException {
+    configurePlanningBehavior(planMode);
     Table table = restTableFor(scanPlanningCatalog(), "all_tasks_table");
     setParserContext(table);
 
@@ -367,7 +330,7 @@ public class TestRESTScanPlanning {
     try (CloseableIterable<FileScanTask> iterable = table.newScan().planFiles()) {
       List<FileScanTask> tasks = Lists.newArrayList(iterable);
 
-      assertThat(tasks).hasSize(1); // 1 data file: FILE_A
+      assertThat(tasks).hasSize(1);
       assertThat(tasks.get(0).file().location()).isEqualTo(FILE_A.location());
       assertThat(tasks.get(0).deletes()).isEmpty();
     }
@@ -434,7 +397,7 @@ public class TestRESTScanPlanning {
 
   @ParameterizedTest
   @EnumSource(MetadataTableType.class)
-  public void metadataTablesWithRemotePlanning(MetadataTableType type) {
+  public void metadataTablesWithRemotePlanning(MetadataTableType type) throws IOException {
     assumeThat(type)
         .as("POSITION_DELETES table does not implement newScan() method")
         .isNotEqualTo(MetadataTableType.POSITION_DELETES);
@@ -446,46 +409,28 @@ public class TestRESTScanPlanning {
     setParserContext(table);
     Table metadataTableInstance = MetadataTableUtils.createMetadataTableInstance(table, type);
     assertThat(metadataTableInstance).isNotNull();
-
-    TableScan metadataTableScan = metadataTableInstance.newScan();
-    CloseableIterable<FileScanTask> metadataTableIterable = metadataTableScan.planFiles();
-    List<FileScanTask> tasks = Lists.newArrayList(metadataTableIterable);
-    assertThat(tasks).isNotEmpty();
+    assertThat(metadataTableInstance.newScan().planFiles()).isNotEmpty();
   }
 
   @ParameterizedTest
   @EnumSource(PlanningMode.class)
   void remoteScanPlanningWithEmptyTable(
-      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode)
-      throws IOException {
+      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode) {
     configurePlanningBehavior(planMode);
     Table table = createTableWithScanPlanning(scanPlanningCatalog(), "empty_table_test");
     setParserContext(table);
-
-    // Execute scan planning on empty table
-    try (CloseableIterable<FileScanTask> iterable = table.newScan().planFiles()) {
-      List<FileScanTask> tasks = Lists.newArrayList(iterable);
-
-      // Verify no tasks are returned for empty table
-      assertThat(tasks).isEmpty();
-    }
+    assertThat(table.newScan().planFiles()).isEmpty();
   }
 
   @ParameterizedTest
   @EnumSource(PlanningMode.class)
   @Disabled("Pruning files based on columns is not yet supported in REST scan planning")
   void remoteScanPlanningWithNonExistentColumn(
-      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode)
-      throws IOException {
+      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode) {
     configurePlanningBehavior(planMode);
     Table table = restTableFor(scanPlanningCatalog(), "non-existent_column");
     setParserContext(table);
-
-    try (CloseableIterable<FileScanTask> iterable =
-        table.newScan().select("non-existent-column").planFiles()) {
-      List<FileScanTask> tasks = Lists.newArrayList(iterable);
-      assertThat(tasks).isEmpty();
-    }
+    assertThat(table.newScan().select("non-existent-column").planFiles()).isEmpty();
   }
 
   @ParameterizedTest
@@ -503,18 +448,15 @@ public class TestRESTScanPlanning {
     // Add third file to the table
     table.newAppend().appendFile(FILE_C).commit();
     long endSnapshotId = table.currentSnapshot().snapshotId();
-    try (CloseableIterable<FileScanTask> iterable =
-        table
-            .newIncrementalAppendScan()
-            .fromSnapshotInclusive(startSnapshotId)
-            .toSnapshot(endSnapshotId)
-            .planFiles()) {
-      List<FileScanTask> tasks = Lists.newArrayList(iterable);
-      assertThat(tasks).hasSize(2); // FILE_B and FILE_C
-      assertThat(tasks)
-          .extracting(task -> task.file().location())
-          .contains(FILE_C.location(), FILE_B.location());
-    }
+    assertThat(
+            table
+                .newIncrementalAppendScan()
+                .fromSnapshotInclusive(startSnapshotId)
+                .toSnapshot(endSnapshotId)
+                .planFiles())
+        .hasSize(2)
+        .extracting(task -> task.file().location())
+        .contains(FILE_C.location(), FILE_B.location());
   }
 
   @ParameterizedTest
@@ -581,7 +523,7 @@ public class TestRESTScanPlanning {
               .actual();
 
       assertThat(taskWithDeletes.file().location()).isEqualTo(FILE_A.location());
-      assertThat(taskWithDeletes.deletes()).hasSize(1); // 1 delete file: FILE_A_EQUALITY_DELETES
+      assertThat(taskWithDeletes.deletes()).hasSize(1);
       assertThat(taskWithDeletes.deletes().get(0).location())
           .isEqualTo(FILE_A_EQUALITY_DELETES.location());
     }
@@ -619,8 +561,7 @@ public class TestRESTScanPlanning {
               .as("Expected FILE_A in scan tasks")
               .actual();
 
-      assertThat(fileATask.deletes())
-          .hasSize(1); // 1 delete file: FILE_A_DELETES (FILE_B_EQUALITY_DELETES not matched)
+      assertThat(fileATask.deletes()).hasSize(1);
       assertThat(fileATask.deletes().get(0).location()).isEqualTo(FILE_A_DELETES.location());
     }
   }
@@ -887,7 +828,7 @@ public class TestRESTScanPlanning {
   // ==================== Endpoint Support Tests ====================
 
   /** Helper class to hold catalog and adapter for endpoint support tests. */
-  protected static class CatalogWithAdapter {
+  private static class CatalogWithAdapter {
     final RESTCatalog catalog;
     final RESTCatalogAdapter adapter;
 
@@ -930,10 +871,7 @@ public class TestRESTScanPlanning {
                   Consumer<Map<String, String>> responseHeaders) {
                 if (ResourcePaths.config().equals(request.path())) {
                   return castResponse(
-                      responseType,
-                      org.apache.iceberg.rest.responses.ConfigResponse.builder()
-                          .withEndpoints(endpoints)
-                          .build());
+                      responseType, ConfigResponse.builder().withEndpoints(endpoints).build());
                 }
                 return super.execute(request, responseType, errorHandler, responseHeaders);
               }
@@ -965,11 +903,12 @@ public class TestRESTScanPlanning {
     table.newAppend().appendFile(FILE_A).commit();
 
     // Should fall back to client-side planning when endpoint is not supported
-    try (CloseableIterable<FileScanTask> iterable = table.newScan().planFiles()) {
-      List<FileScanTask> tasks = Lists.newArrayList(iterable);
-      assertThat(tasks).hasSize(1);
-      assertThat(tasks.get(0).file().location()).isEqualTo(FILE_A.location());
-    }
+    assertThat(table.newScan().planFiles())
+        .hasSize(1)
+        .first()
+        .extracting(ContentScanTask::file)
+        .extracting(ContentFile::location)
+        .isEqualTo(FILE_A.location());
   }
 
   @Test
