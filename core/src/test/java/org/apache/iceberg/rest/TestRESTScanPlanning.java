@@ -18,16 +18,16 @@
  */
 package org.apache.iceberg.rest;
 
-import static org.apache.iceberg.catalog.CatalogTests.FILE_A;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_A_DELETES;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_A_EQUALITY_DELETES;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_B;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_B_DELETES;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_B_EQUALITY_DELETES;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_C;
-import static org.apache.iceberg.catalog.CatalogTests.FILE_C_EQUALITY_DELETES;
-import static org.apache.iceberg.catalog.CatalogTests.SCHEMA;
-import static org.apache.iceberg.catalog.CatalogTests.SPEC;
+import static org.apache.iceberg.TestBase.FILE_A;
+import static org.apache.iceberg.TestBase.FILE_A_DELETES;
+import static org.apache.iceberg.TestBase.FILE_A_EQUALITY_DELETES;
+import static org.apache.iceberg.TestBase.FILE_B;
+import static org.apache.iceberg.TestBase.FILE_B_DELETES;
+import static org.apache.iceberg.TestBase.FILE_B_EQUALITY_DELETES;
+import static org.apache.iceberg.TestBase.FILE_C;
+import static org.apache.iceberg.TestBase.FILE_C_EQUALITY_DELETES;
+import static org.apache.iceberg.TestBase.SCHEMA;
+import static org.apache.iceberg.TestBase.SPEC;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assumptions.assumeThat;
@@ -645,7 +645,7 @@ public class TestRESTScanPlanning {
 
     // Create a filtered scan and execute scan planning with filtering and deletes
     try (CloseableIterable<FileScanTask> iterable =
-        table.newScan().filter(Expressions.equal("data", "test")).planFiles()) {
+        table.newScan().filter(Expressions.lessThan("id", 4)).planFiles()) {
       List<FileScanTask> tasks = Lists.newArrayList(iterable);
 
       // Verify scan planning works with both filtering and deletes
@@ -784,7 +784,7 @@ public class TestRESTScanPlanning {
     table.newFastAppend().appendFile(FILE_B).commit();
 
     // Evolve partition spec to bucket by id with 8 buckets instead of 16
-    table.updateSpec().removeField("id_bucket").addField(Expressions.bucket("id", 8)).commit();
+    table.updateSpec().removeField("data_bucket").addField(Expressions.bucket("data", 8)).commit();
 
     // Create data file with new partition spec (spec-id=1)
     PartitionSpec newSpec = table.spec();
@@ -794,7 +794,7 @@ public class TestRESTScanPlanning {
         DataFiles.builder(newSpec)
             .withPath("/path/to/data-new-spec.parquet")
             .withFileSizeInBytes(10)
-            .withPartitionPath("id_bucket_8=3") // 8-bucket partition
+            .withPartitionPath("data_bucket_8=3") // 8-bucket partition
             .withRecordCount(2)
             .build();
 

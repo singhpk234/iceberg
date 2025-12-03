@@ -88,7 +88,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 public abstract class CatalogTests<C extends Catalog & SupportsNamespaces> {
   private static final String BASE_TABLE_LOCATION = "file:/tmp";
   protected static final Namespace NS = Namespace.of("newdb");
-  public static final TableIdentifier TABLE = TableIdentifier.of(NS, "newtable");
+  protected static final TableIdentifier TABLE = TableIdentifier.of(NS, "newtable");
   protected static final TableIdentifier RENAMED_TABLE = TableIdentifier.of(NS, "table_renamed");
   protected static final TableIdentifier TBL = TableIdentifier.of("ns", "tbl");
 
@@ -115,8 +115,7 @@ public abstract class CatalogTests<C extends Catalog & SupportsNamespaces> {
       new Schema(required(1, "some_id", Types.IntegerType.get()));
 
   // Partition spec used to create tables
-  public static final PartitionSpec SPEC =
-      PartitionSpec.builderFor(SCHEMA).bucket("id", 16).build();
+  static final PartitionSpec SPEC = PartitionSpec.builderFor(SCHEMA).bucket("id", 16).build();
 
   protected static final PartitionSpec TABLE_SPEC =
       PartitionSpec.builderFor(TABLE_SCHEMA).bucket("id", 16).build();
@@ -150,7 +149,7 @@ public abstract class CatalogTests<C extends Catalog & SupportsNamespaces> {
           .withRecordCount(2) // needs at least one record or else metrics will filter it out
           .build();
 
-  public static final DataFile FILE_C =
+  static final DataFile FILE_C =
       DataFiles.builder(SPEC)
           .withPath("/path/to/data-c.parquet")
           .withFileSizeInBytes(10)
@@ -159,7 +158,7 @@ public abstract class CatalogTests<C extends Catalog & SupportsNamespaces> {
           .build();
 
   // Delete files for testing
-  public static final DeleteFile FILE_A_DELETES =
+  static final DeleteFile FILE_A_DELETES =
       FileMetadata.deleteFileBuilder(SPEC)
           .ofPositionDeletes()
           .withPath("/path/to/data-a-deletes.parquet")
@@ -168,39 +167,12 @@ public abstract class CatalogTests<C extends Catalog & SupportsNamespaces> {
           .withRecordCount(1)
           .build();
 
-  public static final DeleteFile FILE_A_EQUALITY_DELETES =
-      FileMetadata.deleteFileBuilder(SPEC)
-          .ofEqualityDeletes(1) // delete on column 1 (id column)
-          .withPath("/path/to/data-a-equality-deletes.parquet")
-          .withFileSizeInBytes(10)
-          .withPartitionPath("id_bucket=0") // same partition as FILE_A
-          .withRecordCount(1)
-          .build();
-
-  public static final DeleteFile FILE_B_DELETES =
+  static final DeleteFile FILE_B_DELETES =
       FileMetadata.deleteFileBuilder(SPEC)
           .ofPositionDeletes()
           .withPath("/path/to/data-b-deletes.parquet")
           .withFileSizeInBytes(10)
           .withPartitionPath("id_bucket=1") // same partition as FILE_B
-          .withRecordCount(1)
-          .build();
-
-  public static final DeleteFile FILE_B_EQUALITY_DELETES =
-      FileMetadata.deleteFileBuilder(SPEC)
-          .ofEqualityDeletes(1) // delete on column 1 (id column)
-          .withPath("/path/to/data-b-equality-deletes.parquet")
-          .withFileSizeInBytes(10)
-          .withPartitionPath("id_bucket=1") // same partition as FILE_B
-          .withRecordCount(1)
-          .build();
-
-  public static final DeleteFile FILE_C_EQUALITY_DELETES =
-      FileMetadata.deleteFileBuilder(SPEC)
-          .ofEqualityDeletes(1) // delete on column 1 (id column)
-          .withPath("/path/to/data-c-equality-deletes.parquet")
-          .withFileSizeInBytes(10)
-          .withPartitionPath("id_bucket=2") // same partition as FILE_C
           .withRecordCount(1)
           .build();
 
