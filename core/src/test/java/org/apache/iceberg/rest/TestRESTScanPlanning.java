@@ -40,10 +40,12 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.ContentFile;
@@ -111,6 +113,19 @@ public class TestRESTScanPlanning {
                   Class<T> responseType,
                   Consumer<ErrorResponse> errorHandler,
                   Consumer<Map<String, String>> responseHeaders) {
+                if (ResourcePaths.config().equals(request.path())) {
+                  return castResponse(
+                      responseType,
+                      ConfigResponse.builder()
+                          .withEndpoints(
+                              Arrays.stream(Route.values())
+                                  .map(r -> Endpoint.create(r.method().name(), r.resourcePath()))
+                                  .collect(Collectors.toList()))
+                          .withOverrides(
+                              ImmutableMap.of(
+                                  RESTCatalogProperties.REST_SCAN_PLANNING_ENABLED, "true"))
+                          .build());
+                }
                 Object body = roundTripSerialize(request.body(), "request");
                 HTTPRequest req = ImmutableHTTPRequest.builder().from(request).body(body).build();
                 T response = super.execute(req, responseType, errorHandler, responseHeaders);
@@ -129,10 +144,7 @@ public class TestRESTScanPlanning {
     httpServer.start();
 
     // Initialize catalog with scan planning enabled
-    this.restCatalogWithScanPlanning =
-        initCatalog(
-            "prod-with-scan-planning",
-            java.util.Map.of(RESTCatalogProperties.REST_SCAN_PLANNING_ENABLED, "true"));
+    this.restCatalogWithScanPlanning = initCatalog("prod-with-scan-planning", ImmutableMap.of());
   }
 
   @AfterEach
