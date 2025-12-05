@@ -469,6 +469,8 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
     trackFileIO(ops);
 
     RESTTable restTable = restTableForScanPlanning(ops, finalIdentifier, tableClient);
+    // RestTable should be only be returned for non-metadata tables, because client would
+    // not have access to metadata files for example manifests, since all it needs is catalog.
     if (restTable != null) {
       return restTable;
     }

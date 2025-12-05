@@ -165,7 +165,7 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
     private void processPlanTask(String planTask) throws InterruptedException {
       FetchScanTasksResponse response = fetchScanTasks(planTask);
       // immediately add any new plan tasks to the queue so the idle workers can pick them up
-      if (response.planTasks() != null && !response.planTasks().isEmpty()) {
+      if (response.planTasks() != null) {
         planTasks.addAll(response.planTasks());
       }
 

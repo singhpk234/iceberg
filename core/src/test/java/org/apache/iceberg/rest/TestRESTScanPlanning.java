@@ -419,6 +419,9 @@ public class TestRESTScanPlanning {
     table.newAppend().appendFile(FILE_B).commit();
     table.newRowDelta().addDeletes(FILE_A_DELETES).addDeletes(FILE_B_EQUALITY_DELETES).commit();
     setParserContext(table);
+    // RESTTable should be only be returned for non-metadata tables, because client would
+    // not have access to metadata files for example manifests, since all it needs is file scan
+    // tasks, this test just verifies that metadata tables can be scanned with RESTTable.
     Table metadataTableInstance = MetadataTableUtils.createMetadataTableInstance(table, type);
     assertThat(metadataTableInstance).isNotNull();
     assertThat(metadataTableInstance.newScan().planFiles()).isNotEmpty();
@@ -448,8 +451,7 @@ public class TestRESTScanPlanning {
   @ParameterizedTest
   @EnumSource(PlanningMode.class)
   void incrementalScan(
-      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode)
-      throws IOException {
+      Function<TestPlanningBehavior.Builder, TestPlanningBehavior.Builder> planMode) {
     configurePlanningBehavior(planMode);
     Table table = restTableFor(scanPlanningCatalog(), "incremental_scan");
     setParserContext(table);

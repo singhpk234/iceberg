@@ -93,7 +93,7 @@ public abstract class CatalogTests<C extends Catalog & SupportsNamespaces> {
   protected static final TableIdentifier TBL = TableIdentifier.of("ns", "tbl");
 
   // Schema passed to create tables
-  public static final Schema SCHEMA =
+  protected static final Schema SCHEMA =
       new Schema(
           required(3, "id", Types.IntegerType.get(), "unique ID 🤪"),
           required(4, "data", Types.StringType.get()));
