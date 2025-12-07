@@ -244,16 +244,16 @@ class RESTTableScan extends DataTableScan {
       Endpoint.check(supportedEndpoints, Endpoint.V1_FETCH_TABLE_SCAN_PLAN_TASKS);
     }
 
-    return new ScanTasksIterable(
-        planTasks,
-        fileScanTasks,
-        client,
-        resourcePaths,
-        tableIdentifier,
-        headers,
-        planExecutor(),
-        table.specs(),
-        isCaseSensitive(),
+    return CloseableIterable.whenComplete(
+        new ScanTaskIterable(
+            planTasks,
+            fileScanTasks,
+            client,
+            resourcePaths,
+            tableIdentifier,
+            headers,
+            planExecutor(),
+            parserContext),
         this::cancelPlan);
   }
 
