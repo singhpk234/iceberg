@@ -29,9 +29,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
@@ -41,9 +39,9 @@ import org.apache.iceberg.util.ThreadPools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class ScanTasksIterable implements CloseableIterable<FileScanTask> {
+class ScanTaskIterable implements CloseableIterable<FileScanTask> {
 
-  private static final Logger LOG = LoggerFactory.getLogger(ScanTasksIterable.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ScanTaskIterable.class);
   private static final int DEFAULT_TASK_QUEUE_CAPACITY = 1000;
   private static final long QUEUE_POLL_TIMEOUT_MS = 100;
   private static final int WORKER_POOL_SIZE = Math.max(1, ThreadPools.WORKER_THREAD_POOL_SIZE / 4);
@@ -52,15 +50,15 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
   private final ConcurrentLinkedQueue<String> planTasks;
   private final AtomicInteger activeWorkers = new AtomicInteger(0);
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
+  private final AtomicBoolean drainingInitialTasks = new AtomicBoolean(false);
   private final ExecutorService executorService;
   private final RESTClient client;
   private final ResourcePaths resourcePaths;
   private final TableIdentifier tableIdentifier;
   private final Map<String, String> headers;
   private final ParserContext parserContext;
-  private final Supplier<Boolean> cancellationCallback;
 
-  ScanTasksIterable(
+  ScanTaskIterable(
       List<String> initialPlanTasks,
       List<FileScanTask> initialFileScanTasks,
       RESTClient client,
@@ -68,13 +66,10 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
       TableIdentifier tableIdentifier,
       Map<String, String> headers,
       ExecutorService executorService,
-      Map<Integer, PartitionSpec> specsById,
-      boolean caseSensitive,
-      Supplier<Boolean> cancellationCallback) {
+      ParserContext parserContext) {
 
     this.taskQueue = new LinkedBlockingQueue<>(DEFAULT_TASK_QUEUE_CAPACITY);
     this.planTasks = new ConcurrentLinkedQueue<>();
-    // Initialize initial file scan tasks queue so that multiple workers can poll produce from it.
     this.initialFileScanTasks = new ConcurrentLinkedQueue<>(initialFileScanTasks);
 
     this.client = client;
@@ -82,64 +77,61 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
     this.tableIdentifier = tableIdentifier;
     this.headers = headers;
     this.executorService = executorService;
-    this.cancellationCallback = cancellationCallback;
-    this.parserContext =
-        ParserContext.builder()
-            .add("specsById", specsById)
-            .add("caseSensitive", caseSensitive)
-            .build();
-
+    this.parserContext = parserContext;
     if (initialPlanTasks != null && !initialPlanTasks.isEmpty()) {
       planTasks.addAll(initialPlanTasks);
-    }
-
-    submitFixedWorkers();
-  }
-
-  private void submitFixedWorkers() {
-    if (planTasks.isEmpty() && initialFileScanTasks.isEmpty()) {
-      // nothing to do
+    } else if (initialFileScanTasks.isEmpty()) {
+      // No tasks to produce
       return;
     }
 
-    // need to spawn at least one worker to enqueue initial file scan tasks
-    int numWorkers = Math.min(WORKER_POOL_SIZE, Math.max(planTasks.size(), 1));
+    startInitialWorkers();
+  }
 
-    for (int i = 0; i < numWorkers; i++) {
+  private void startInitialWorkers() {
+    for (int i = 0; i < WORKER_POOL_SIZE; i++) {
       executorService.execute(new PlanTaskWorker());
     }
   }
 
   @Override
   public CloseableIterator<FileScanTask> iterator() {
-    return new ScanTasksIterator();
+    return new ScanTaskIterator();
   }
 
   @Override
   public void close() throws IOException {}
 
+  /**
+   * Worker that populates the taskQueue for consumers from the initial tasks or plan tasks.
+   *
+   * <p>Workers expand plan tasks into file scan tasks, may enqueue additional plan tasks for
+   * further processing. One worker is responsible for seeding the taskQueue with the initial scan
+   * tasks. When the last active worker finishes and unprocessed plan tasks remain, a new worker is
+   * scheduled to continue planning until shutdown is requested.
+   */
   private class PlanTaskWorker implements Runnable {
 
     @Override
+    @SuppressWarnings("checkstyle:CyclomaticComplexity")
     public void run() {
       activeWorkers.incrementAndGet();
 
       try {
-        while (true) {
-          if (shutdown.get()) {
-            return;
-          }
-
-          String planTask = planTasks.poll();
-          if (planTask == null) {
-            // if there are no more plan tasks, see if we can just add any remaining initial
-            // file scan tasks before exiting.
-            while (!initialFileScanTasks.isEmpty()) {
+        while (!shutdown.get() && !Thread.currentThread().isInterrupted()) {
+          // First lucky plan worker is responsible for draining the initial tasks into the
+          // taskQueue
+          if (drainingInitialTasks.compareAndSet(false, true)) {
+            while (!initialFileScanTasks.isEmpty() && !shutdown.get()) {
               FileScanTask initialFileScanTask = initialFileScanTasks.poll();
               if (initialFileScanTask != null) {
                 taskQueue.put(initialFileScanTask);
               }
             }
+          }
+
+          String planTask = planTasks.poll();
+          if (planTask == null) {
             return;
           }
 
@@ -152,11 +144,7 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
         throw new RuntimeException("Worker failed processing planTask", e);
       } finally {
         int remaining = activeWorkers.decrementAndGet();
-
-        if (remaining == 0
-            && !planTasks.isEmpty()
-            && !shutdown.get()
-            && !initialFileScanTasks.isEmpty()) {
+        if (remaining == 0 && !planTasks.isEmpty() && !shutdown.get()) {
           executorService.execute(new PlanTaskWorker());
         }
       }
@@ -164,28 +152,17 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
 
     private void processPlanTask(String planTask) throws InterruptedException {
       FetchScanTasksResponse response = fetchScanTasks(planTask);
-      // immediately add any new plan tasks to the queue so the idle workers can pick them up
-      if (response.planTasks() != null) {
-        planTasks.addAll(response.planTasks());
-      }
-
-      // before blocking on the task queue, check for shutdown again
-      if (shutdown.get()) {
-        return;
-      }
-
-      // Now since the network IO is done, first add any initial file scan tasks
-      while (!initialFileScanTasks.isEmpty()) {
-        FileScanTask initialFileScanTask = initialFileScanTasks.poll();
-        if (initialFileScanTask != null) {
-          taskQueue.put(initialFileScanTask);
-        }
-      }
-
+      // Add file scan tasks first so that consumers can start consuming as soon as they are ready
       if (response.fileScanTasks() != null) {
         for (FileScanTask task : response.fileScanTasks()) {
-          taskQueue.put(task);
+          if (!shutdown.get()) {
+            taskQueue.put(task);
+          }
         }
+      }
+
+      if (!shutdown.get() && response.planTasks() != null) {
+        planTasks.addAll(response.planTasks());
       }
     }
 
@@ -203,7 +180,8 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
     }
   }
 
-  private class ScanTasksIterator implements CloseableIterator<FileScanTask> {
+  /** Iterator which uses taskQueue as the source of truth of file scan tasks */
+  private class ScanTaskIterator implements CloseableIterator<FileScanTask> {
     private FileScanTask nextTask = null;
 
     @Override
@@ -219,13 +197,6 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
 
         try {
           nextTask = taskQueue.poll(QUEUE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-
-          if (nextTask == null) {
-            // it may happen the iterator is called when there are still initial file scan tasks
-            // waiting to be added.
-            nextTask = initialFileScanTasks.poll();
-          }
-
           if (nextTask != null) {
             return true;
           }
@@ -241,6 +212,7 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
       if (!hasNext()) {
         throw new NoSuchElementException("No more scan tasks available");
       }
+
       FileScanTask result = nextTask;
       nextTask = null;
       return result;
@@ -249,14 +221,6 @@ class ScanTasksIterable implements CloseableIterable<FileScanTask> {
     @Override
     public void close() {
       shutdown.set(true);
-      if (cancellationCallback != null) {
-        try {
-          @SuppressWarnings("unused")
-          Boolean ignored = cancellationCallback.get();
-        } catch (Exception e) {
-          // Ignore cancellation failures
-        }
-      }
       LOG.info(
           "ScanTasksIterator is closing. Clearing {} queued tasks and {} plan tasks.",
           taskQueue.size(),
