@@ -93,10 +93,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
   }
 
   private void submitFixedWorkers() {
-    // need to spawn at least one worker to enqueue initial file scan tasks
-    int numWorkers = Math.min(WORKER_POOL_SIZE, Math.max(planTasks.size(), 1));
-
-    for (int i = 0; i < numWorkers; i++) {
+    for (int i = 0; i < WORKER_POOL_SIZE; i++) {
       executorService.execute(new PlanTaskWorker());
     }
   }
@@ -112,6 +109,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
   private class PlanTaskWorker implements Runnable {
 
     @Override
+    @SuppressWarnings("checkstyle:CyclomaticComplexity")
     public void run() {
       activeWorkers.incrementAndGet();
 
@@ -138,12 +136,10 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
       } catch (Exception e) {
         throw new RuntimeException("Worker failed processing planTask", e);
       } finally {
-        int remaining = activeWorkers.decrementAndGet();
-
-        if (remaining == 0
+        int remainingActiveWorkers = activeWorkers.decrementAndGet();
+        if ((remainingActiveWorkers == 0
             && planTasks.isEmpty()
-            && !shutdown.get()
-            && initialFileScanTasks.isEmpty()) {
+            && initialFileScanTasks.isEmpty()) || (shutdown.get())) {
           try {
             taskQueue.put(DUMMY_TASK);
           } catch (InterruptedException e) {
