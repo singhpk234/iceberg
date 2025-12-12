@@ -144,11 +144,11 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
             && planTasks.isEmpty()
             && !shutdown.get()
             && initialFileScanTasks.isEmpty()) {
-            try {
-                taskQueue.put(DUMMY_TASK);
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-            }
+          try {
+            taskQueue.put(DUMMY_TASK);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
         }
       }
     }
