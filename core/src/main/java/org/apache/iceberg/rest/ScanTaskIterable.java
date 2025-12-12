@@ -29,6 +29,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.io.CloseableIterable;
@@ -45,6 +46,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
   private static final int DEFAULT_TASK_QUEUE_CAPACITY = 1000;
   private static final long QUEUE_POLL_TIMEOUT_MS = 100;
   private static final int WORKER_POOL_SIZE = Math.max(1, ThreadPools.WORKER_THREAD_POOL_SIZE / 4);
+  private static final FileScanTask DUMMY_TASK = new BaseFileScanTask(null, null, null, null, null);
   private final BlockingQueue<FileScanTask> taskQueue;
   private final ConcurrentLinkedQueue<FileScanTask> initialFileScanTasks;
   private final ConcurrentLinkedQueue<String> planTasks;
@@ -82,7 +84,8 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
     if (initialPlanTasks != null && !initialPlanTasks.isEmpty()) {
       planTasks.addAll(initialPlanTasks);
     } else if (initialFileScanTasks.isEmpty()) {
-      // nothing to do, no need to spawn workers.
+      // Add the dummy task and exit
+      taskQueue.add(DUMMY_TASK);
       return;
     }
 
@@ -90,11 +93,6 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
   }
 
   private void submitFixedWorkers() {
-    if (planTasks.isEmpty() && initialFileScanTasks.isEmpty()) {
-      // nothing to do
-      return;
-    }
-
     // need to spawn at least one worker to enqueue initial file scan tasks
     int numWorkers = Math.min(WORKER_POOL_SIZE, Math.max(planTasks.size(), 1));
 
@@ -118,7 +116,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
       activeWorkers.incrementAndGet();
 
       try {
-        while (!shutdown.get()) {
+        while (!shutdown.get() && !Thread.currentThread().isInterrupted()) {
           String planTask = planTasks.poll();
           if (planTask == null) {
             // if there are no more plan tasks, see if we can just add any remaining initial
@@ -143,10 +141,14 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
         int remaining = activeWorkers.decrementAndGet();
 
         if (remaining == 0
-            && !planTasks.isEmpty()
+            && planTasks.isEmpty()
             && !shutdown.get()
-            && !initialFileScanTasks.isEmpty()) {
-          executorService.execute(new PlanTaskWorker());
+            && initialFileScanTasks.isEmpty()) {
+            try {
+                taskQueue.put(DUMMY_TASK);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
         }
       }
     }
@@ -204,11 +206,10 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
       while (true) {
         try {
           nextTask = taskQueue.poll(QUEUE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-          if (nextTask != null) {
-            return true;
-          }
-          if (isDone()) {
+          if (nextTask == DUMMY_TASK) {
             return false;
+          } else if (nextTask != null) {
+            return true;
           }
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
@@ -236,17 +237,6 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
           planTasks.size());
       taskQueue.clear();
       planTasks.clear();
-    }
-
-    private boolean isDone() {
-      // Reorder the conditions to make sure TaskQueue is empty is checked last.
-      // It may happen that a worker is about to add a new task to the queue, but before
-      // that happens, taskQueue.isEmpty() is checked then it completes fast before the
-      // activeWorker is decremented. This would lead to a false negative.
-      return activeWorkers.get() == 0
-          && planTasks.isEmpty()
-          && initialFileScanTasks.isEmpty()
-          && taskQueue.isEmpty();
     }
   }
 }
