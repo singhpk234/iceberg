@@ -46,6 +46,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
   private static final int DEFAULT_TASK_QUEUE_CAPACITY = 1000;
   private static final long QUEUE_POLL_TIMEOUT_MS = 100;
   private static final int WORKER_POOL_SIZE = Math.max(1, ThreadPools.WORKER_THREAD_POOL_SIZE / 4);
+  // Dummy task acts as a poison pill to indicate that there will be no more tasks
   private static final FileScanTask DUMMY_TASK = new BaseFileScanTask(null, null, null, null, null);
   private final BlockingQueue<FileScanTask> taskQueue;
   private final ConcurrentLinkedQueue<FileScanTask> initialFileScanTasks;
@@ -109,7 +110,6 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
   private class PlanTaskWorker implements Runnable {
 
     @Override
-    @SuppressWarnings("checkstyle:CyclomaticComplexity")
     public void run() {
       activeWorkers.incrementAndGet();
 
@@ -119,12 +119,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
           if (planTask == null) {
             // if there are no more plan tasks, see if we can just add any remaining initial
             // file scan tasks before exiting.
-            while (!initialFileScanTasks.isEmpty()) {
-              FileScanTask initialFileScanTask = initialFileScanTasks.poll();
-              if (initialFileScanTask != null) {
-                taskQueue.put(initialFileScanTask);
-              }
-            }
+            offerRemainingInitialTasks();
             return;
           }
 
@@ -137,9 +132,9 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
         throw new RuntimeException("Worker failed processing planTask", e);
       } finally {
         int remainingActiveWorkers = activeWorkers.decrementAndGet();
-        if ((remainingActiveWorkers == 0
-            && planTasks.isEmpty()
-            && initialFileScanTasks.isEmpty()) || (shutdown.get())) {
+        boolean noMoreWork =
+            remainingActiveWorkers == 0 && planTasks.isEmpty() && initialFileScanTasks.isEmpty();
+        if (noMoreWork || shutdown.get()) {
           try {
             taskQueue.put(DUMMY_TASK);
           } catch (InterruptedException e) {
@@ -162,16 +157,20 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
       }
 
       // Now since the network IO is done, first add any initial file scan tasks
-      while (!initialFileScanTasks.isEmpty()) {
-        FileScanTask initialFileScanTask = initialFileScanTasks.poll();
-        if (initialFileScanTask != null) {
-          taskQueue.put(initialFileScanTask);
-        }
-      }
+      offerRemainingInitialTasks();
 
       if (response.fileScanTasks() != null) {
         for (FileScanTask task : response.fileScanTasks()) {
           taskQueue.put(task);
+        }
+      }
+    }
+
+    private void offerRemainingInitialTasks() throws InterruptedException {
+      while (!initialFileScanTasks.isEmpty()) {
+        FileScanTask initialFileScanTask = initialFileScanTasks.poll();
+        if (initialFileScanTask != null) {
+          taskQueue.put(initialFileScanTask);
         }
       }
     }
@@ -199,7 +198,7 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
         return true;
       }
 
-      while (true) {
+      while (!shutdown.get()) {
         try {
           nextTask = taskQueue.poll(QUEUE_POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS);
           if (nextTask == DUMMY_TASK) {
@@ -212,6 +211,8 @@ class ScanTaskIterable implements CloseableIterable<FileScanTask> {
           return false;
         }
       }
+
+      return false;
     }
 
     @Override
