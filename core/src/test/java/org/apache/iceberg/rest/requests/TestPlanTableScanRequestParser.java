@@ -248,7 +248,7 @@ public class TestPlanTableScanRequestParser {
         .asString()
         .contains("snapshotId=123")
         .contains("select=[colA, colB]")
-        .contains("filter=true")
+        .contains("filterJson=true")
         .contains("caseSensitive=false")
         .contains("useSnapshotSchema=true")
         .contains("statsFields=[stat1]")

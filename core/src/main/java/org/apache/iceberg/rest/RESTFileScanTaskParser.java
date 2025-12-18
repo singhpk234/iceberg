@@ -32,6 +32,7 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionParser;
@@ -94,12 +95,13 @@ class RESTFileScanTaskParser {
       deleteFiles = indices.stream().map(allDeleteFiles::get).toArray(DeleteFile[]::new);
     }
 
+    Schema schema = specsById.get(specId).schema();
     Expression filter = null;
     if (jsonNode.has(RESIDUAL_FILTER)) {
-      filter = ExpressionParser.fromJson(jsonNode.get(RESIDUAL_FILTER));
+      filter = ExpressionParser.fromJson(jsonNode.get(RESIDUAL_FILTER), schema);
     }
 
-    String schemaString = SchemaParser.toJson(specsById.get(specId).schema());
+    String schemaString = SchemaParser.toJson(schema);
     String specString = PartitionSpecParser.toJson(specsById.get(specId));
     ResidualEvaluator boundResidual =
         ResidualEvaluator.of(specsById.get(specId), filter, isCaseSensitive);

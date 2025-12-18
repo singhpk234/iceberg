@@ -50,8 +50,6 @@ public class TestRemoteScanPlanning extends TestSelect {
   }
 
   @TestTemplate
-  @Disabled(
-      "binary filter that is used by Spark is not working because ExpressionParser.fromJSON doesn't have the Schema to properly parse the filter expression")
   public void testBinaryInFilter() {
     super.testBinaryInFilter();
   }
