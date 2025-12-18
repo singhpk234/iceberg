@@ -49,6 +49,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Scan;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
@@ -659,7 +660,7 @@ public class CatalogHandlers {
               .fromSnapshotInclusive(request.startSnapshotId())
               .toSnapshot(request.endSnapshotId());
 
-      configuredScan = configureScan(incrementalScan, request);
+      configuredScan = configureScan(incrementalScan, request, table.schema());
     } else {
       // Regular table scan at a specific snapshot
       TableScan tableScan = table.newScan();
@@ -669,7 +670,7 @@ public class CatalogHandlers {
       }
 
       // Apply filters and projections using common method
-      configuredScan = configureScan(tableScan, request);
+      configuredScan = configureScan(tableScan, request, table.schema());
     }
 
     if (shouldPlanAsync.test(configuredScan)) {
@@ -775,18 +776,20 @@ public class CatalogHandlers {
    *
    * @param scan the scan to configure
    * @param request the plan table scan request containing filters and projections
+   * @param schema the table schema to use for type-aware filter deserialization
    * @param <T> the specific scan type (TableScan, IncrementalAppendScan, etc.)
    * @return the configured scan with filters and projections applied
    */
   private static <T extends Scan<T, FileScanTask, ?>> T configureScan(
-      T scan, PlanTableScanRequest request) {
+      T scan, PlanTableScanRequest request, Schema schema) {
     T configuredScan = scan;
 
     if (request.select() != null) {
       configuredScan = configuredScan.select(request.select());
     }
-    if (request.filter() != null) {
-      configuredScan = configuredScan.filter(request.filter());
+    Expression filter = request.filter(schema);
+    if (filter != null) {
+      configuredScan = configuredScan.filter(filter);
     }
     if (request.statsFields() != null) {
       configuredScan = configuredScan.includeColumnStats(request.statsFields());

@@ -119,40 +119,60 @@ public class SingleValueParser {
         }
         return uuid;
       case DATE:
-        Preconditions.checkArgument(
-            defaultValue.isTextual(), "Cannot parse default as a %s value: %s", type, defaultValue);
-        return DateTimeUtil.isoDateToDays(defaultValue.textValue());
-      case TIME:
-        Preconditions.checkArgument(
-            defaultValue.isTextual(), "Cannot parse default as a %s value: %s", type, defaultValue);
-        return DateTimeUtil.isoTimeToMicros(defaultValue.textValue());
-      case TIMESTAMP:
-        Preconditions.checkArgument(
-            defaultValue.isTextual(), "Cannot parse default as a %s value: %s", type, defaultValue);
-        if (((Types.TimestampType) type).shouldAdjustToUTC()) {
-          String timestampTz = defaultValue.textValue();
-          Preconditions.checkArgument(
-              DateTimeUtil.isUTCTimestamptz(timestampTz),
-              "Cannot parse default as a %s value: %s, offset must be +00:00",
-              type,
-              defaultValue);
-          return DateTimeUtil.isoTimestamptzToMicros(timestampTz);
+        if (defaultValue.isTextual()) {
+          return DateTimeUtil.isoDateToDays(defaultValue.textValue());
+        } else if (defaultValue.isIntegralNumber() && defaultValue.canConvertToInt()) {
+          return defaultValue.intValue();
         } else {
-          return DateTimeUtil.isoTimestampToMicros(defaultValue.textValue());
+          throw new IllegalArgumentException(
+              String.format("Cannot parse default as a %s value: %s", type, defaultValue));
+        }
+      case TIME:
+        if (defaultValue.isTextual()) {
+          return DateTimeUtil.isoTimeToMicros(defaultValue.textValue());
+        } else if (defaultValue.isIntegralNumber() && defaultValue.canConvertToLong()) {
+          return defaultValue.longValue();
+        } else {
+          throw new IllegalArgumentException(
+              String.format("Cannot parse default as a %s value: %s", type, defaultValue));
+        }
+      case TIMESTAMP:
+        if (defaultValue.isTextual()) {
+          if (((Types.TimestampType) type).shouldAdjustToUTC()) {
+            String timestampTz = defaultValue.textValue();
+            Preconditions.checkArgument(
+                DateTimeUtil.isUTCTimestamptz(timestampTz),
+                "Cannot parse default as a %s value: %s, offset must be +00:00",
+                type,
+                defaultValue);
+            return DateTimeUtil.isoTimestamptzToMicros(timestampTz);
+          } else {
+            return DateTimeUtil.isoTimestampToMicros(defaultValue.textValue());
+          }
+        } else if (defaultValue.isIntegralNumber() && defaultValue.canConvertToLong()) {
+          return defaultValue.longValue();
+        } else {
+          throw new IllegalArgumentException(
+              String.format("Cannot parse default as a %s value: %s", type, defaultValue));
         }
       case TIMESTAMP_NANO:
-        Preconditions.checkArgument(
-            defaultValue.isTextual(), "Cannot parse default as a %s value: %s", type, defaultValue);
-        if (((Types.TimestampNanoType) type).shouldAdjustToUTC()) {
-          String timestampTzNano = defaultValue.textValue();
-          Preconditions.checkArgument(
-              DateTimeUtil.isUTCTimestamptz(timestampTzNano),
-              "Cannot parse default as a %s value: %s, offset must be +00:00",
-              type,
-              defaultValue);
-          return DateTimeUtil.isoTimestamptzToNanos(timestampTzNano);
+        if (defaultValue.isTextual()) {
+          if (((Types.TimestampNanoType) type).shouldAdjustToUTC()) {
+            String timestampTzNano = defaultValue.textValue();
+            Preconditions.checkArgument(
+                DateTimeUtil.isUTCTimestamptz(timestampTzNano),
+                "Cannot parse default as a %s value: %s, offset must be +00:00",
+                type,
+                defaultValue);
+            return DateTimeUtil.isoTimestamptzToNanos(timestampTzNano);
+          } else {
+            return DateTimeUtil.isoTimestampToNanos(defaultValue.textValue());
+          }
+        } else if (defaultValue.isIntegralNumber() && defaultValue.canConvertToLong()) {
+          return defaultValue.longValue();
         } else {
-          return DateTimeUtil.isoTimestampToNanos(defaultValue.textValue());
+          throw new IllegalArgumentException(
+              String.format("Cannot parse default as a %s value: %s", type, defaultValue));
         }
       case FIXED:
         Preconditions.checkArgument(
