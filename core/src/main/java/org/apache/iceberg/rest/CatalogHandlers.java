@@ -49,7 +49,6 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Scan;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
-import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
@@ -66,6 +65,7 @@ import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.NoSuchViewException;
+import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
@@ -660,7 +660,7 @@ public class CatalogHandlers {
               .fromSnapshotInclusive(request.startSnapshotId())
               .toSnapshot(request.endSnapshotId());
 
-      configuredScan = configureScan(incrementalScan, request, table.schema());
+      configuredScan = configureScan(incrementalScan, request, incrementalScan.schema());
     } else {
       // Regular table scan at a specific snapshot
       TableScan tableScan = table.newScan();
@@ -670,7 +670,7 @@ public class CatalogHandlers {
       }
 
       // Apply filters and projections using common method
-      configuredScan = configureScan(tableScan, request, table.schema());
+      configuredScan = configureScan(tableScan, request, tableScan.schema());
     }
 
     if (shouldPlanAsync.test(configuredScan)) {

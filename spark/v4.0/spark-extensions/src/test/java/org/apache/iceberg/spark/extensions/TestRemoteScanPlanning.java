@@ -25,7 +25,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.rest.RESTCatalogProperties;
 import org.apache.iceberg.spark.SparkCatalogConfig;
 import org.apache.iceberg.spark.sql.TestSelect;
-import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 @ExtendWith(ParameterizedTestExtension.class)
@@ -46,10 +45,5 @@ public class TestRemoteScanPlanning extends TestSelect {
         SparkCatalogConfig.REST.catalogName() + ".default.binary_table"
       }
     };
-  }
-
-  @TestTemplate
-  public void testBinaryInFilter() {
-    super.testBinaryInFilter();
   }
 }

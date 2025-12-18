@@ -156,6 +156,13 @@ public class PlanTableScanRequest implements RESTRequest {
       Preconditions.checkArgument(
           minRowsRequested >= 0L, "Invalid scan: minRowsRequested is negative");
     }
+
+    if (null != filterJson) {
+      Preconditions.checkArgument(
+          filterJson.isBoolean() || filterJson.isObject(),
+          "Cannot parse expression from non-object: %s",
+          filterJson);
+    }
   }
 
   @Override
