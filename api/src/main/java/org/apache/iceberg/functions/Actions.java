@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.iceberg.rest.restrictions;
+package org.apache.iceberg.functions;
 
 import org.apache.iceberg.util.SerializableFunction;
 

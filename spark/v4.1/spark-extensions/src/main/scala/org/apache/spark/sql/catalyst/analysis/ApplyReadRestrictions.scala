@@ -19,7 +19,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.security.SecureRandom
-import org.apache.iceberg.rest.restrictions.Action
+import org.apache.iceberg.functions.Action
 import org.apache.iceberg.rest.restrictions.ReadRestrictions
 import org.apache.iceberg.spark.functions.MaskAlphanumFunction
 import org.apache.iceberg.spark.source.SparkTable

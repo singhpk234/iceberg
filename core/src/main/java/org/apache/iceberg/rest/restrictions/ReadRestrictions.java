@@ -22,6 +22,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Set;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.functions.Action;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 
