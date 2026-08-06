@@ -22,6 +22,7 @@ import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.ParameterizedTestExtension;
 import org.apache.iceberg.Parameters;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.rest.RESTCatalogProperties;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 @ExtendWith(ParameterizedTestExtension.class)
@@ -52,6 +53,17 @@ public abstract class CatalogTestBase extends TestBaseWithCatalog {
         ImmutableMap.builder()
             .putAll(SparkCatalogConfig.REST.properties())
             .put(CatalogProperties.URI, restCatalog.properties().get(CatalogProperties.URI))
+            .build()
+      },
+      {
+        SparkCatalogConfig.REST.catalogName(),
+        SparkCatalogConfig.REST.implementation(),
+        ImmutableMap.builder()
+            .putAll(SparkCatalogConfig.REST.properties())
+            .put(CatalogProperties.URI, restCatalog.properties().get(CatalogProperties.URI))
+            // this flag is typically only set by the server, but we set it from the client for
+            // testing
+            .put(RESTCatalogProperties.REST_SCAN_PLANNING_ENABLED, "true")
             .build()
       }
     };
