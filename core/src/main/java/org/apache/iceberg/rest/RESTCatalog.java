@@ -127,7 +127,7 @@ public class RESTCatalog
 
   @Override
   public Table loadTable(TableIdentifier identifier, LoadContext loadContext) {
-    return sessionCatalog.loadTable(context, identifier, loadContext);
+    return delegate.loadTable(identifier, loadContext);
   }
 
   @Override

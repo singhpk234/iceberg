@@ -46,6 +46,7 @@ import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
+import org.apache.iceberg.catalog.LoadContext;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
@@ -325,6 +326,51 @@ public class TestFreshnessAwareLoading extends TestBaseWithRESTServer {
     Mockito.verify(adapterForRESTServer, times(2))
         .execute(
             matches(HTTPRequest.HTTPMethod.GET, RESOURCE_PATHS.table(TABLE)), any(), any(), any());
+  }
+
+  @Test
+  public void referencedByLoadIsNotServedFromPlainLoadCacheEntry() {
+    restCatalog.createNamespace(TABLE.namespace());
+    restCatalog.createTable(TABLE, SCHEMA);
+
+    Cache<SessionIdTableId, TableWithETag> tableCache =
+        restCatalog.sessionCatalog().tableCache().cache();
+
+    restCatalog.loadTable(TABLE);
+    assertThat(tableCache.asMap())
+        .containsOnlyKeys(SessionIdTableId.of(DEFAULT_SESSION_CONTEXT.sessionId(), TABLE));
+
+    // reusing the plain entry would return a table carrying no referenced-by, so its credential
+    // requests would silently omit the view chain
+    expectFullTableLoadForLoadTable(TABLE, adapterForRESTServer);
+    restCatalog.loadTable(TABLE, referencedBy("outer_view"));
+
+    assertThat(tableCache.stats().hitCount()).isZero();
+  }
+
+  @Test
+  public void referencedByLoadDoesNotPopulateTableCache() {
+    restCatalog.createNamespace(TABLE.namespace());
+    restCatalog.createTable(TABLE, SCHEMA);
+
+    Cache<SessionIdTableId, TableWithETag> tableCache =
+        restCatalog.sessionCatalog().tableCache().cache();
+
+    restCatalog.loadTable(TABLE, referencedBy("outer_view"));
+
+    // caching it would serve this chain's config to a later load through a different chain or none
+    assertThat(tableCache.asMap()).isEmpty();
+
+    expectFullTableLoadForLoadTable(TABLE, adapterForRESTServer);
+    restCatalog.loadTable(TABLE, referencedBy("other_view"));
+
+    assertThat(tableCache.stats().hitCount()).isZero();
+  }
+
+  private static LoadContext referencedBy(String viewName) {
+    return LoadContext.builder()
+        .referencedBy(ImmutableList.of(TableIdentifier.of(NS, viewName)))
+        .build();
   }
 
   @Test

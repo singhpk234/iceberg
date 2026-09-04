@@ -18,21 +18,27 @@
  */
 package org.apache.iceberg.rest;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.hc.core5.net.URIBuilder;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.relocated.com.google.common.base.Joiner;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.base.Splitter;
 import org.apache.iceberg.relocated.com.google.common.base.Strings;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
-import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.UUIDUtil;
 
@@ -45,6 +51,13 @@ public class RESTUtil {
   static final String NAMESPACE_SEPARATOR_URLENCODED_UTF_8 = "%1F";
 
   public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+  /**
+   * Query parameters whose values are already percent-encoded and must be appended verbatim, since
+   * {@link URIBuilder#addParameter} would re-encode them ({@code %1F} to {@code %251F}).
+   */
+  private static final Set<String> PRE_ENCODED_QUERY_PARAMS =
+      ImmutableSet.of(RESTCatalogProperties.REFERENCED_BY_QUERY_PARAMETER);
 
   private RESTUtil() {}
 
@@ -347,11 +360,11 @@ public class RESTUtil {
    *
    * @param planId the scan plan ID, or null if not set
    * @param properties configuration properties that may contain a referenced-by value
-   * @return a map of query parameters, or null if no parameters are needed
+   * @return a map of query parameters, empty if no parameters are needed
    */
   public static Map<String, String> credentialsQueryParams(
       String planId, Map<String, String> properties) {
-    Map<String, String> queryParams = Maps.newHashMap();
+    ImmutableMap.Builder<String, String> queryParams = ImmutableMap.builder();
     if (planId != null) {
       queryParams.put(RESTCatalogProperties.PLAN_ID_QUERY_PARAMETER, planId);
     }
@@ -361,7 +374,7 @@ public class RESTUtil {
       queryParams.put(RESTCatalogProperties.REFERENCED_BY_QUERY_PARAMETER, referencedBy);
     }
 
-    return queryParams.isEmpty() ? null : queryParams;
+    return queryParams.build();
   }
 
   /**
@@ -383,16 +396,50 @@ public class RESTUtil {
       return Map.of();
     }
 
-    List<String> entries =
+    String entries =
         referencedBy.stream()
             .map(
                 ident ->
                     encodeNamespace(ident.namespace(), namespaceSeparator)
                         + namespaceSeparator
                         + encodeString(ident.name()))
-            .collect(Collectors.toList());
+            .collect(Collectors.joining(","));
 
-    return ImmutableMap.of(
-        RESTCatalogProperties.REFERENCED_BY_QUERY_PARAMETER, Joiner.on(",").join(entries));
+    return ImmutableMap.of(RESTCatalogProperties.REFERENCED_BY_QUERY_PARAMETER, entries);
+  }
+
+  /**
+   * Builds a request URI from a full path and query parameters.
+   *
+   * <p>Values for {@link #PRE_ENCODED_QUERY_PARAMS} are appended verbatim; all others are encoded
+   * by {@link URIBuilder}.
+   *
+   * @param fullPath the absolute request path, without a query string
+   * @param queryParameters the query parameters to add
+   * @return the request URI
+   */
+  static URI buildRequestUri(String fullPath, Map<String, String> queryParameters) {
+    try {
+      URIBuilder builder = new URIBuilder(fullPath);
+      List<String> preEncoded = Lists.newArrayList();
+      for (Map.Entry<String, String> entry : queryParameters.entrySet()) {
+        if (PRE_ENCODED_QUERY_PARAMS.contains(entry.getKey())) {
+          preEncoded.add(entry.getKey() + "=" + entry.getValue());
+        } else {
+          builder.addParameter(entry.getKey(), entry.getValue());
+        }
+      }
+
+      URI uri = builder.build();
+      if (preEncoded.isEmpty()) {
+        return uri;
+      }
+
+      String prefix = uri.getRawQuery() == null ? "?" : "&";
+      return new URI(uri + prefix + Joiner.on("&").join(preEncoded));
+    } catch (URISyntaxException e) {
+      throw new RESTException(
+          "Failed to create request URI from base %s, params %s", fullPath, queryParameters);
+    }
   }
 }

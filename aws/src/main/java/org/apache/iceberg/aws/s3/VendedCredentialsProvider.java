@@ -111,14 +111,10 @@ public class VendedCredentialsProvider implements AwsCredentialsProvider, SdkAut
     return httpClient()
         .get(
             credentialsEndpoint,
-            credentialsQueryParams(),
+            RESTUtil.credentialsQueryParams(planId, properties),
             LoadCredentialsResponse.class,
             Map.of(),
             ErrorHandlers.defaultErrorHandler());
-  }
-
-  private Map<String, String> credentialsQueryParams() {
-    return RESTUtil.credentialsQueryParams(planId, properties);
   }
 
   private Optional<RefreshResult<AwsCredentials>> credentialFromProperties() {

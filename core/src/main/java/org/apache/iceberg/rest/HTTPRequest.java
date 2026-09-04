@@ -21,10 +21,8 @@ package org.apache.iceberg.rest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Map;
 import javax.annotation.Nullable;
-import org.apache.hc.core5.net.URIBuilder;
 import org.apache.iceberg.exceptions.RESTException;
 import org.immutables.value.Value;
 
@@ -64,32 +62,7 @@ public interface HTTPRequest {
       fullPath = RESTUtil.stripTrailingSlash(String.format("%s/%s", baseUri, path()));
     }
 
-    try {
-      URIBuilder builder = new URIBuilder(fullPath);
-      String referencedBy = null;
-      for (Map.Entry<String, String> entry : queryParameters().entrySet()) {
-        if (RESTCatalogProperties.REFERENCED_BY_QUERY_PARAMETER.equals(entry.getKey())) {
-          // URIBuilder.addParameter would re-encode the comma chain delimiter, breaking the spec
-          // wire form. Append this value verbatim instead.
-          referencedBy = entry.getValue();
-        } else {
-          builder.addParameter(entry.getKey(), entry.getValue());
-        }
-      }
-      URI uri = builder.build();
-      if (referencedBy != null) {
-        String suffix =
-            (uri.getRawQuery() == null ? "?" : "&")
-                + RESTCatalogProperties.REFERENCED_BY_QUERY_PARAMETER
-                + "="
-                + referencedBy;
-        uri = new URI(uri.toString() + suffix);
-      }
-      return uri;
-    } catch (URISyntaxException e) {
-      throw new RESTException(
-          "Failed to create request URI from base %s, params %s", fullPath, queryParameters());
-    }
+    return RESTUtil.buildRequestUri(fullPath, queryParameters());
   }
 
   /** Returns the HTTP method of this request. */

@@ -439,15 +439,6 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
       SessionContext context,
       TableIdentifier identifier,
       SnapshotMode mode,
-      Map<String, String> headers,
-      Consumer<Map<String, String>> responseHeaders) {
-    return loadInternal(context, identifier, mode, List.of(), headers, responseHeaders);
-  }
-
-  private LoadTableResponse loadInternal(
-      SessionContext context,
-      TableIdentifier identifier,
-      SnapshotMode mode,
       List<TableIdentifier> referencedBy,
       Map<String, String> headers,
       Consumer<Map<String, String>> responseHeaders) {
@@ -466,8 +457,13 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
 
   @VisibleForTesting
   Map<String, String> paramsForLoadTable(SnapshotMode mode, List<TableIdentifier> referencedBy) {
+    Map<String, String> referencedByParam = referencedByToQueryParam(referencedBy);
+    if (referencedByParam.isEmpty()) {
+      return snapshotModeToParam(mode);
+    }
+
     Map<String, String> params = Maps.newHashMap(snapshotModeToParam(mode));
-    params.putAll(RESTUtil.referencedByToQueryParam(referencedBy, namespaceSeparator));
+    params.putAll(referencedByParam);
     return params;
   }
 
@@ -482,8 +478,7 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
    */
   private Map<String, String> injectReferencedBy(
       Map<String, String> config, List<TableIdentifier> referencedBy) {
-    Map<String, String> referencedByParam =
-        RESTUtil.referencedByToQueryParam(referencedBy, namespaceSeparator);
+    Map<String, String> referencedByParam = referencedByToQueryParam(referencedBy);
     if (referencedByParam.isEmpty()) {
       return config;
     }
@@ -517,7 +512,11 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
     TableIdentifier loadedIdent;
 
     Map<String, String> responseHeaders = Maps.newHashMap();
-    TableWithETag cachedTable = tableCache.getIfPresent(context.sessionId(), identifier);
+    // the referenced-by chain is baked into the cached table's config, so a view-mediated load must
+    // not share cache entries with loads through a different chain (or through none)
+    boolean useTableCache = referencedBy.isEmpty();
+    TableWithETag cachedTable =
+        useTableCache ? tableCache.getIfPresent(context.sessionId(), identifier) : null;
 
     try {
       response =
@@ -545,7 +544,8 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
         TableIdentifier baseIdent = TableIdentifier.of(identifier.namespace().levels());
         try {
           responseHeaders.clear();
-          cachedTable = tableCache.getIfPresent(context.sessionId(), baseIdent);
+          cachedTable =
+              useTableCache ? tableCache.getIfPresent(context.sessionId(), baseIdent) : null;
 
           response =
               loadInternal(
@@ -619,7 +619,7 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
             remoteSigningConfig);
 
     String eTag = responseHeaders.getOrDefault(HttpHeaders.ETAG, null);
-    if (eTag != null) {
+    if (eTag != null && useTableCache) {
       tableCache.put(context.sessionId(), finalIdentifier, tableSupplier, eTag);
     }
 
@@ -1123,7 +1123,8 @@ public class RESTSessionCatalog extends BaseViewSessionCatalog
         throw new AlreadyExistsException("View with same name already exists: %s", ident);
       }
 
-      LoadTableResponse response = loadInternal(context, ident, snapshotMode, Map.of(), h -> {});
+      LoadTableResponse response =
+          loadInternal(context, ident, snapshotMode, List.of(), Map.of(), h -> {});
 
       String fullName = fullTableName(ident);
 
